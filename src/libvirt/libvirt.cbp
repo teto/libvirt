@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="libvirt" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/libvirt" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/libvirt" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Unit filename="../conf/capabilities.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/capabilities.h" />
+		<Unit filename="../conf/cpu_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/cpu_conf.h" />
+		<Unit filename="../conf/device_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/device_conf.h" />
+		<Unit filename="../conf/domain_audit.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/domain_audit.h" />
+		<Unit filename="../conf/domain_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/domain_conf.h" />
+		<Unit filename="../conf/domain_event.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/domain_event.h" />
+		<Unit filename="../conf/domain_nwfilter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/domain_nwfilter.h" />
+		<Unit filename="../conf/interface_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/interface_conf.h" />
+		<Unit filename="../conf/netdev_bandwidth_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/netdev_bandwidth_conf.h" />
+		<Unit filename="../conf/netdev_vlan_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/netdev_vlan_conf.h" />
+		<Unit filename="../conf/netdev_vport_profile_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/netdev_vport_profile_conf.h" />
+		<Unit filename="../conf/network_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/network_conf.h" />
+		<Unit filename="../conf/network_event.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/network_event.h" />
+		<Unit filename="../conf/node_device_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/node_device_conf.h" />
+		<Unit filename="../conf/nwfilter_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/nwfilter_conf.h" />
+		<Unit filename="../conf/nwfilter_ipaddrmap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/nwfilter_ipaddrmap.h" />
+		<Unit filename="../conf/nwfilter_params.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/nwfilter_params.h" />
+		<Unit filename="../conf/object_event.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/object_event.h" />
+		<Unit filename="../conf/object_event_private.h" />
+		<Unit filename="../conf/secret_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/secret_conf.h" />
+		<Unit filename="../conf/snapshot_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/snapshot_conf.h" />
+		<Unit filename="../conf/storage_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/storage_conf.h" />
+		<Unit filename="../conf/storage_encryption_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/storage_encryption_conf.h" />
+		<Unit filename="../conf/virchrdev.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../conf/virchrdev.h" />
+		<Unit filename="../qemu/qemu_agent.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_agent.h" />
+		<Unit filename="../qemu/qemu_bridge_filter.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_bridge_filter.h" />
+		<Unit filename="../qemu/qemu_capabilities.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_capabilities.h" />
+		<Unit filename="../qemu/qemu_cgroup.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_cgroup.h" />
+		<Unit filename="../qemu/qemu_command.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_command.h" />
+		<Unit filename="../qemu/qemu_conf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_conf.h" />
+		<Unit filename="../qemu/qemu_domain.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_domain.h" />
+		<Unit filename="../qemu/qemu_driver.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_driver.h" />
+		<Unit filename="../qemu/qemu_hostdev.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_hostdev.h" />
+		<Unit filename="../qemu/qemu_hotplug.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_hotplug.h" />
+		<Unit filename="../qemu/qemu_hotplugpriv.h" />
+		<Unit filename="../qemu/qemu_migration.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_migration.h" />
+		<Unit filename="../qemu/qemu_monitor.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_monitor.h" />
+		<Unit filename="../qemu/qemu_monitor_json.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_monitor_json.h" />
+		<Unit filename="../qemu/qemu_monitor_text.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_monitor_text.h" />
+		<Unit filename="../qemu/qemu_process.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../qemu/qemu_process.h" />
+		<Unit filename="../qemu/qemu_processpriv.h" />
+		<Extensions>
+			<code_completion />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
