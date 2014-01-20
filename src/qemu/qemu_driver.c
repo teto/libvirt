@@ -6692,7 +6692,7 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
     case VIR_DOMAIN_DEVICE_FS:
         {
         int i = -1;
-        fs = dev->fs;
+        fs = dev->data.fs;
         // TODO check no similar fs is registered => create
         // - virDomainFindFS() en fait  utiliser virDomainFSIndexByName qui existe deja
         //
@@ -6701,8 +6701,8 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
         // virDomainFSDefParseXML >
         // virDomainFSIndexByName
         // virDomainGetRootFilesystem
-        //
-        i =  virDomainFSIndexByName( vmdef, fs->dst)
+        //fss
+        i =  virDomainFSIndexByName( vmdef, fs->dst);
         if ( i >= 0) {
             virReportError(VIR_ERR_OPERATION_INVALID,"%s",
                            _("Target already exists"));
