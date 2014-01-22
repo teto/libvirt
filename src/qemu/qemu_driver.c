@@ -6961,6 +6961,7 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
         !(flags & VIR_DOMAIN_AFFECT_LIVE))
         parse_flags |= VIR_DOMAIN_XML_INACTIVE;
 
+
     dev = dev_copy = virDomainDeviceDefParse(xml, vm->def,
                                              caps, driver->xmlopt,
                                              parse_flags);

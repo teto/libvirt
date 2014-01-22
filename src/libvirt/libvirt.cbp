@@ -126,6 +126,9 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="../conf/virchrdev.h" />
+		<Unit filename="../libvirt.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="../qemu/qemu_agent.c">
 			<Option compilerVar="CC" />
 		</Unit>
