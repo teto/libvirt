@@ -6961,7 +6961,7 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
         !(flags & VIR_DOMAIN_AFFECT_LIVE))
         parse_flags |= VIR_DOMAIN_XML_INACTIVE;
 
-
+    VIR_INFO("Parsing domain device %s","tes");
     dev = dev_copy = virDomainDeviceDefParse(xml, vm->def,
                                              caps, driver->xmlopt,
                                              parse_flags);
@@ -6974,6 +6974,7 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
          * create a deep copy of device as adding
          * to CONFIG takes one instance.
          */
+         VIR_INFO("Adding a copy%s","tes");
         dev_copy = virDomainDeviceDefCopy(dev, vm->def, caps, driver->xmlopt);
         if (!dev_copy)
             goto endjob;

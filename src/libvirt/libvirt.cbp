@@ -33,6 +33,10 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="../../include/libvirt/libvirt-lxc.h" />
+		<Unit filename="../../include/libvirt/libvirt-qemu.h" />
+		<Unit filename="../../include/libvirt/libvirt.h" />
+		<Unit filename="../../include/libvirt/virterror.h" />
 		<Unit filename="../conf/capabilities.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -191,6 +195,289 @@
 		</Unit>
 		<Unit filename="../qemu/qemu_process.h" />
 		<Unit filename="../qemu/qemu_processpriv.h" />
+		<Unit filename="../util/iohelper.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viralloc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viralloc.h" />
+		<Unit filename="../util/virarch.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virarch.h" />
+		<Unit filename="../util/viratomic.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viratomic.h" />
+		<Unit filename="../util/viraudit.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viraudit.h" />
+		<Unit filename="../util/virauth.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virauth.h" />
+		<Unit filename="../util/virauthconfig.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virauthconfig.h" />
+		<Unit filename="../util/virbitmap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virbitmap.h" />
+		<Unit filename="../util/virbuffer.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virbuffer.h" />
+		<Unit filename="../util/vircgroup.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/vircgroup.h" />
+		<Unit filename="../util/vircgrouppriv.h" />
+		<Unit filename="../util/virclosecallbacks.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virclosecallbacks.h" />
+		<Unit filename="../util/vircommand.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/vircommand.h" />
+		<Unit filename="../util/virconf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virconf.h" />
+		<Unit filename="../util/virdbus.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virdbus.h" />
+		<Unit filename="../util/virdbuspriv.h" />
+		<Unit filename="../util/virdnsmasq.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virdnsmasq.h" />
+		<Unit filename="../util/virebtables.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virebtables.h" />
+		<Unit filename="../util/virendian.h" />
+		<Unit filename="../util/virerror.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virerror.h" />
+		<Unit filename="../util/virevent.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virevent.h" />
+		<Unit filename="../util/vireventpoll.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/vireventpoll.h" />
+		<Unit filename="../util/virfile.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virfile.h" />
+		<Unit filename="../util/virhash.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virhash.h" />
+		<Unit filename="../util/virhashcode.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virhashcode.h" />
+		<Unit filename="../util/virhook.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virhook.h" />
+		<Unit filename="../util/viridentity.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viridentity.h" />
+		<Unit filename="../util/virinitctl.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virinitctl.h" />
+		<Unit filename="../util/viriptables.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viriptables.h" />
+		<Unit filename="../util/virjson.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virjson.h" />
+		<Unit filename="../util/virkeycode.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virkeycode.h" />
+		<Unit filename="../util/virkeyfile.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virkeyfile.h" />
+		<Unit filename="../util/virkeymaps.h" />
+		<Unit filename="../util/virlockspace.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virlockspace.h" />
+		<Unit filename="../util/virlog.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virlog.h" />
+		<Unit filename="../util/virmacaddr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virmacaddr.h" />
+		<Unit filename="../util/virnetdev.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdev.h" />
+		<Unit filename="../util/virnetdevbandwidth.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevbandwidth.h" />
+		<Unit filename="../util/virnetdevbridge.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevbridge.h" />
+		<Unit filename="../util/virnetdevmacvlan.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevmacvlan.h" />
+		<Unit filename="../util/virnetdevopenvswitch.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevopenvswitch.h" />
+		<Unit filename="../util/virnetdevtap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevtap.h" />
+		<Unit filename="../util/virnetdevveth.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevveth.h" />
+		<Unit filename="../util/virnetdevvlan.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevvlan.h" />
+		<Unit filename="../util/virnetdevvportprofile.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetdevvportprofile.h" />
+		<Unit filename="../util/virnetlink.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnetlink.h" />
+		<Unit filename="../util/virnodesuspend.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnodesuspend.h" />
+		<Unit filename="../util/virnuma.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virnuma.h" />
+		<Unit filename="../util/virobject.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virobject.h" />
+		<Unit filename="../util/virpci.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virpci.h" />
+		<Unit filename="../util/virpidfile.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virpidfile.h" />
+		<Unit filename="../util/virportallocator.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virportallocator.h" />
+		<Unit filename="../util/virprocess.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virprocess.h" />
+		<Unit filename="../util/virrandom.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virrandom.h" />
+		<Unit filename="../util/virscsi.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virscsi.h" />
+		<Unit filename="../util/virsexpr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virsexpr.h" />
+		<Unit filename="../util/virsocketaddr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virsocketaddr.h" />
+		<Unit filename="../util/virstatslinux.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virstatslinux.h" />
+		<Unit filename="../util/virstoragefile.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virstoragefile.h" />
+		<Unit filename="../util/virstring.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virstring.h" />
+		<Unit filename="../util/virsysinfo.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virsysinfo.h" />
+		<Unit filename="../util/virsystemd.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virsystemd.h" />
+		<Unit filename="../util/virthread.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virthread.h" />
+		<Unit filename="../util/virthreadpool.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virthreadpool.h" />
+		<Unit filename="../util/virthreadpthread.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virthreadpthread.h" />
+		<Unit filename="../util/virthreadwin32.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virthreadwin32.h" />
+		<Unit filename="../util/virtime.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virtime.h" />
+		<Unit filename="../util/virtpm.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virtpm.h" />
+		<Unit filename="../util/virtypedparam.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virtypedparam.h" />
+		<Unit filename="../util/viruri.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viruri.h" />
+		<Unit filename="../util/virusb.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virusb.h" />
+		<Unit filename="../util/virutil.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virutil.h" />
+		<Unit filename="../util/viruuid.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/viruuid.h" />
+		<Unit filename="../util/virxml.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../util/virxml.h" />
 		<Extensions>
 			<code_completion />
 			<debugger />
