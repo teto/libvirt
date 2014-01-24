@@ -94,6 +94,7 @@
 #include "virstring.h"
 #include "viraccessapicheck.h"
 #include "viraccessapicheckqemu.h"
+#include "domain_conf.h"
 
 #define VIR_FROM_THIS VIR_FROM_QEMU
 
@@ -6604,7 +6605,7 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
     virDomainHostdevDefPtr hostdev;
     virDomainLeaseDefPtr lease;
     virDomainControllerDefPtr controller;
-//    virDomainFSDefPtr fs;
+    virDomainFSDefPtr fs;
 
     switch (dev->type) {
     case VIR_DOMAIN_DEVICE_DISK:
@@ -6691,27 +6692,25 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
     // qemuBuildFSStr dans qemu_command.c BuildCommand
     case VIR_DOMAIN_DEVICE_FS:
         {
-        //int i = -1;
-        //fs = dev->data.fs;
-        // TODO check no similar fs is registered => create
-        // - virDomainFindFS() en fait  utiliser virDomainFSIndexByName qui existe deja
-        //
-        // Available functions:
-        // virDomainAuditFS
-        // virDomainFSDefParseXML >
-        // virDomainFSIndexByName
-        // virDomainGetRootFilesystem
-        //fss
-//        i =  virDomainFSIndexByName( vmdef, fs->dst);
-//        if ( i >= 0) {
-//            virReportError(VIR_ERR_OPERATION_INVALID,"%s",
-//                           _("Target already exists"));
-//            return -1;
-//        }
+            VIR_INFO("FS device detected");
+            //int i = -1;
+            fs = dev->data.fs;
+            // TODO check no similar fs is registered => create
+            // - virDomainFindFS() en fait  utiliser virDomainFSIndexByName qui existe deja
+            // Available functions:
+            // virDomainAuditFS
+            // virDomainFSDefParseXML >
+            // virDomainFSIndexByName
+            // virDomainGetRootFilesystem
+            if ( virDomainFSIndexByName( vmdef, fs->dst) >= 0) {
+                virReportError(VIR_ERR_OPERATION_INVALID,"%s",
+                               _("Target already exists"));
+                return -1;
+            }
 
-//        if (qemuDomainFS(vmdef, ) < 0){
-//            return -1;
-//        }
+            if ( virDomainFSInsert(vmdef, fs ) < 0){
+                return -1;
+            }
         }
         break;
 
@@ -6985,10 +6984,14 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
     else if (!(qemuCaps = virQEMUCapsCacheLookup(driver->qemuCapsCache, vm->def->emulator)))
         goto cleanup;
 
+
+
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+        VIR_INFO("MATT: vir domain affect config, checking if compatible device");
         if (virDomainDefCompatibleDevice(vm->def, dev) < 0)
             goto endjob;
 
+    VIR_INFO("MATT: Making a copy");
         /* Make a copy for updated domain. */
         vmdef = virDomainObjCopyPersistentDef(vm, caps, driver->xmlopt);
         if (!vmdef)
@@ -6998,6 +7001,9 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
     }
 
     if (flags & VIR_DOMAIN_AFFECT_LIVE) {
+
+        VIR_INFO("MATT: vir domain affect live");
+
         if (virDomainDefCompatibleDevice(vm->def, dev_copy) < 0)
             goto endjob;
 
@@ -7016,11 +7022,12 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
 
     /* Finally, if no error until here, we can save config. */
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-        ret = virDomainSaveConfig(cfg->configDir, vmdef);
-        if (!ret) {
-            virDomainObjAssignDef(vm, vmdef, false, NULL);
-            vmdef = NULL;
-        }
+            VIR_INFO("MATT: saving config");
+//        ret = virDomainSaveConfig(cfg->configDir, vmdef);
+//        if (!ret) {
+//            virDomainObjAssignDef(vm, vmdef, false, NULL);
+//            vmdef = NULL;
+//        }
     }
 
 endjob:
