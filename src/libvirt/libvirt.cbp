@@ -33,9 +33,11 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="../../docs/schemas/domain.rng" />
 		<Unit filename="../../include/libvirt/libvirt-lxc.h" />
 		<Unit filename="../../include/libvirt/libvirt-qemu.h" />
 		<Unit filename="../../include/libvirt/libvirt.h" />
+		<Unit filename="../../include/libvirt/libvirt.h.in" />
 		<Unit filename="../../include/libvirt/virterror.h" />
 		<Unit filename="../conf/capabilities.c">
 			<Option compilerVar="CC" />
@@ -133,6 +135,16 @@
 		<Unit filename="../libvirt.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="../libvirt.conf" />
+		<Unit filename="../libvirt.def" />
+		<Unit filename="../libvirt.syms" />
+		<Unit filename="../libvirt_access.syms" />
+		<Unit filename="../libvirt_access_qemu.syms" />
+		<Unit filename="../libvirt_daemon.syms" />
+		<Unit filename="../libvirt_driver_modules.syms" />
+		<Unit filename="../libvirt_private.syms" />
+		<Unit filename="../libvirt_public.syms" />
+		<Unit filename="../libvirt_qemu.syms" />
 		<Unit filename="../qemu/qemu_agent.c">
 			<Option compilerVar="CC" />
 		</Unit>
