@@ -6703,14 +6703,18 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
             // virDomainFSIndexByName
             // virDomainGetRootFilesystem
             if ( virDomainFSIndexByName( vmdef, fs->dst) >= 0) {
+                VIR_INFO("Identical FS found");
                 virReportError(VIR_ERR_OPERATION_INVALID,"%s",
                                _("Target already exists"));
                 return -1;
             }
 
             if ( virDomainFSInsert(vmdef, fs ) < 0){
+//                virReportError(VIR_ERR_OPERATION_INVALID,"%s",
+//                                _("Could not insert FS"));
                 return -1;
             }
+            dev->data.fs = NULL;
         }
         break;
 
@@ -6991,7 +6995,7 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
         if (virDomainDefCompatibleDevice(vm->def, dev) < 0)
             goto endjob;
 
-    VIR_INFO("MATT: Making a copy");
+        VIR_INFO("MATT: Making a copy");
         /* Make a copy for updated domain. */
         vmdef = virDomainObjCopyPersistentDef(vm, caps, driver->xmlopt);
         if (!vmdef)
@@ -7022,12 +7026,14 @@ static int qemuDomainAttachDeviceFlags(virDomainPtr dom, const char *xml,
 
     /* Finally, if no error until here, we can save config. */
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-            VIR_INFO("MATT: saving config");
-//        ret = virDomainSaveConfig(cfg->configDir, vmdef);
-//        if (!ret) {
-//            virDomainObjAssignDef(vm, vmdef, false, NULL);
-//            vmdef = NULL;
-//        }
+
+        VIR_INFO("MATT: saving config");
+        ret = virDomainSaveConfig(cfg->configDir, vmdef);
+        if (!ret) {
+            virDomainObjAssignDef(vm, vmdef, false, NULL);
+            vmdef = NULL;
+        }
+        VIR_INFO("MATT: finished saving config");
     }
 
 endjob:

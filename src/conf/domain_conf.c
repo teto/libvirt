@@ -17845,10 +17845,12 @@ virDiskNameToBusDeviceIndex(virDomainDiskDefPtr disk,
 int
 virDomainFSInsert(virDomainDefPtr def,virDomainFSDefPtr fs)
 {
-    if (VIR_REALLOC_N(def->fss, def->nfss + 1) < 0)
+
+    if (VIR_REALLOC_N(def->fss, def->nfss+1) < 0)
         return -1;
 
     def->fss[def->nfss++]  = fs;
+//    def->nfss++;
     return 0;
 }
 
