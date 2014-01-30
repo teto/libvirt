@@ -221,6 +221,7 @@ virDomainFeatureStateTypeFromString;
 virDomainFeatureStateTypeToString;
 virDomainFSDefFree;
 virDomainFSIndexByName;
+virDomainFSInsert;
 virDomainFSTypeFromString;
 virDomainFSTypeToString;
 virDomainFSWrpolicyTypeFromString;
