@@ -6606,6 +6606,7 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
     virDomainHostdevDefPtr hostdev;
     virDomainLeaseDefPtr lease;
     virDomainControllerDefPtr controller;
+    virDomainFSDefPtr fs;
 
     switch (dev->type) {
     case VIR_DOMAIN_DEVICE_DISK:
@@ -6685,6 +6686,23 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
         if (qemuDomainChrInsert(vmdef, dev->data.chr) < 0)
             return -1;
         dev->data.chr = NULL;
+        break;
+
+    case VIR_DOMAIN_DEVICE_FS:
+        {
+            fs = dev->data.fs;
+            if (virDomainFSIndexByName(vmdef, fs->dst) >= 0) {
+                VIR_INFO("Identical FS found");
+                virReportError(VIR_ERR_OPERATION_INVALID,
+                             "%s", _("Target already exists"));
+                return -1;
+            }
+
+            if (virDomainFSInsert(vmdef, fs) < 0) {
+                return -1;
+            }
+            dev->data.fs = NULL;
+        }
         break;
 
     default:

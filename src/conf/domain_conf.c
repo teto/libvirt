@@ -17933,6 +17933,18 @@ virDiskNameToBusDeviceIndex(virDomainDiskDefPtr disk,
     return 0;
 }
 
+
+int
+virDomainFSInsert(virDomainDefPtr def, virDomainFSDefPtr fs)
+{
+
+    if (VIR_REALLOC_N(def->fss, def->nfss+1) < 0)
+        return -1;
+
+    def->fss[def->nfss++]  = fs;
+    return 0;
+}
+
 virDomainFSDefPtr
 virDomainGetRootFilesystem(virDomainDefPtr def)
 {
