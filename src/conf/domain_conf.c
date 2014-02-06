@@ -17931,6 +17931,36 @@ virDiskNameToBusDeviceIndex(virDomainDiskDefPtr disk,
     return 0;
 }
 
+
+int
+virDomainFSInsert(virDomainDefPtr def, virDomainFSDefPtr fs)
+{
+
+    return VIR_APPEND_ELEMENT(def->fss, def->nfss, fs);
+}
+
+virDomainFSDefPtr
+virDomainFSRemove(virDomainDefPtr def, size_t i)
+{
+    virDomainFSDefPtr fs = def->fss[i];
+
+    if (def->nfss > 1) {
+
+        memmove(def->fss + i,
+                def->fss + i + 1,
+                sizeof(*def->fss) *
+                (def->nfss - (i + 1)));
+        def->nfss--;
+        if (VIR_REALLOC_N(def->fss, def->nfss) < 0) {
+            /* ignore, harmless */
+        }
+    } else {
+        VIR_FREE(def->fss);
+        def->nfss = 0;
+    }
+    return fs;
+}
+
 virDomainFSDefPtr
 virDomainGetRootFilesystem(virDomainDefPtr def)
 {
