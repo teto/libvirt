@@ -9868,10 +9868,8 @@ virDomainChrTargetTypeToString(int deviceType,
 int
 virDomainHostdevInsert(virDomainDefPtr def, virDomainHostdevDefPtr hostdev)
 {
-    if (VIR_REALLOC_N(def->hostdevs, def->nhostdevs + 1) < 0)
-        return -1;
-    def->hostdevs[def->nhostdevs++]  = hostdev;
-    return 0;
+
+    return VIR_APPEND_ELEMENT(def->hostdevs, def->nhostdevs, hostdev);
 }
 
 virDomainHostdevDefPtr
