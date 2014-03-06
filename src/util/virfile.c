@@ -1,7 +1,7 @@
 /*
  * virfile.c: safer file handling
  *
- * Copyright (C) 2010-2013 Red Hat, Inc.
+ * Copyright (C) 2010-2014 Red Hat, Inc.
  * Copyright (C) 2010 IBM Corporation
  * Copyright (C) 2010 Stefan Berger
  * Copyright (C) 2010 Eric Blake
@@ -1730,7 +1730,7 @@ virFileAccessibleAs(const char *path, int mode,
     if (ngroups < 0)
         return -1;
 
-    forkRet = virFork(&pid);
+    pid = virFork();
 
     if (pid < 0) {
         VIR_FREE(groups);
@@ -1739,19 +1739,14 @@ virFileAccessibleAs(const char *path, int mode,
 
     if (pid) { /* parent */
         VIR_FREE(groups);
-        if (virProcessWait(pid, &status) < 0) {
-            /* virProcessWait() already
-             * reported error */
-            return -1;
-        }
-
-        if (!WIFEXITED(status)) {
+        if (virProcessWait(pid, &status, false) < 0) {
+            /* virProcessWait() already reported error */
             errno = EINTR;
             return -1;
         }
 
         if (status) {
-            errno = WEXITSTATUS(status);
+            errno = status;
             return -1;
         }
 
@@ -1842,7 +1837,6 @@ virFileOpenForked(const char *path, int openflags, mode_t mode,
     int waitret, status, ret = 0;
     int fd = -1;
     int pair[2] = { -1, -1 };
-    int forkRet;
     gid_t *groups;
     int ngroups;
 
@@ -1864,7 +1858,7 @@ virFileOpenForked(const char *path, int openflags, mode_t mode,
         return ret;
     }
 
-    forkRet = virFork(&pid);
+    pid = virFork();
     if (pid < 0)
         return -errno;
 
@@ -1872,15 +1866,8 @@ virFileOpenForked(const char *path, int openflags, mode_t mode,
 
         /* child */
 
-        VIR_FORCE_CLOSE(pair[0]); /* preserves errno */
-        if (forkRet < 0) {
-            /* error encountered and logged in virFork() after the fork. */
-            ret = -errno;
-            goto childerror;
-        }
-
         /* set desired uid/gid, then attempt to create the file */
-
+        VIR_FORCE_CLOSE(pair[0]);
         if (virSetUIDGID(uid, gid, groups, ngroups) < 0) {
             ret = -errno;
             goto childerror;
@@ -2151,7 +2138,7 @@ virDirCreate(const char *path,
     if (ngroups < 0)
         return -errno;
 
-    int forkRet = virFork(&pid);
+    pid = virFork();
 
     if (pid < 0) {
         ret = -errno;
@@ -2181,13 +2168,7 @@ parenterror:
 
     /* child */
 
-    if (forkRet < 0) {
-        /* error encountered and logged in virFork() after the fork. */
-        goto childerror;
-    }
-
     /* set desired uid/gid, then attempt to create the directory */
-
     if (virSetUIDGID(uid, gid, groups, ngroups) < 0) {
         ret = -errno;
         goto childerror;
@@ -2339,6 +2320,35 @@ cleanup:
     VIR_FREE(tmp);
     return ret;
 }
+
+
+int
+virFileMakeParentPath(const char *path)
+{
+    char *p;
+    char *tmp;
+    int ret = -1;
+
+    VIR_DEBUG("path=%s", path);
+
+    if (VIR_STRDUP(tmp, path) < 0) {
+        errno = ENOMEM;
+        return -1;
+    }
+
+    if ((p = strrchr(tmp, '/')) == NULL) {
+        errno = EINVAL;
+        goto cleanup;
+    }
+    *p = '\0';
+
+    ret = virFileMakePathHelper(tmp, 0777);
+
+ cleanup:
+    VIR_FREE(tmp);
+    return ret;
+}
+
 
 /* Build up a fully qualified path for a config file to be
  * associated with a persistent guest or network */

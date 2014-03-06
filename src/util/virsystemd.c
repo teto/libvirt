@@ -21,6 +21,10 @@
 
 #include <config.h>
 
+#ifdef WITH_SYSTEMD_DAEMON
+# include <systemd/sd-daemon.h>
+#endif
+
 #include "virsystemd.h"
 #include "virdbus.h"
 #include "virstring.h"
@@ -169,6 +173,9 @@ int virSystemdCreateMachine(const char *name,
     if (ret < 0)
         return ret;
 
+    if ((ret = virDBusIsServiceRegistered("org.freedesktop.systemd1")) < 0)
+        return ret;
+
     if (!(conn = virDBusGetSystemBus()))
         return -1;
 
@@ -243,8 +250,10 @@ int virSystemdCreateMachine(const char *name,
                           iscontainer ? "container" : "vm",
                           (unsigned int)pidleader,
                           rootdir ? rootdir : "",
-                          1, "Slice", "s",
-                          slicename) < 0)
+                          3,
+                          "Slice", "s", slicename,
+                          "After", "as", 1, "libvirtd.service",
+                          "Before", "as", 1, "libvirt-guests.service") < 0)
         goto cleanup;
 
     ret = 0;
@@ -266,6 +275,9 @@ int virSystemdTerminateMachine(const char *name,
 
     ret = virDBusIsServiceEnabled("org.freedesktop.machine1");
     if (ret < 0)
+        return ret;
+
+    if ((ret = virDBusIsServiceRegistered("org.freedesktop.systemd1")) < 0)
         return ret;
 
     if (!(conn = virDBusGetSystemBus()))
@@ -301,4 +313,12 @@ int virSystemdTerminateMachine(const char *name,
 cleanup:
     VIR_FREE(machinename);
     return ret;
+}
+
+void
+virSystemdNotifyStartup(void)
+{
+#ifdef WITH_SYSTEMD_DAEMON
+    sd_notify(0, "READY=1");
+#endif
 }

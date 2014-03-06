@@ -997,7 +997,7 @@ qemuProcessHandleBlockJob(qemuMonitorPtr mon ATTRIBUTE_UNUSED,
         if ((type == VIR_DOMAIN_BLOCK_JOB_TYPE_PULL ||
              type == VIR_DOMAIN_BLOCK_JOB_TYPE_COMMIT) &&
             status == VIR_DOMAIN_BLOCK_JOB_COMPLETED)
-            qemuDomainDetermineDiskChain(driver, disk, true);
+            qemuDomainDetermineDiskChain(driver, vm, disk, true);
         if (disk->mirror && type == VIR_DOMAIN_BLOCK_JOB_TYPE_COPY &&
             status == VIR_DOMAIN_BLOCK_JOB_READY)
             disk->mirroring = true;
@@ -2002,7 +2002,7 @@ qemuPrepareCpumap(virQEMUDriverPtr driver,
             size_t j;
             int cur_ncpus = caps->host.numaCell[i]->ncpus;
             bool result;
-            if (virBitmapGetBit(nodemask, i, &result) < 0) {
+            if (virBitmapGetBit(nodemask, caps->host.numaCell[i]->num, &result) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                                _("Failed to convert nodeset to cpuset"));
                 virBitmapFree(cpumap);
@@ -2773,7 +2773,7 @@ qemuProcessNotifyNets(virDomainDefPtr def)
 
     for (i = 0; i < def->nnets; i++) {
         virDomainNetDefPtr net = def->nets[i];
-        if (networkNotifyActualDevice(net) < 0)
+        if (networkNotifyActualDevice(def, net) < 0)
             return -1;
     }
     return 0;
@@ -4393,7 +4393,7 @@ void qemuProcessStop(virQEMUDriverPtr driver,
 
         /* kick the device out of the hostdev list too */
         virDomainNetRemoveHostdev(def, net);
-        networkReleaseActualDevice(net);
+        networkReleaseActualDevice(vm->def, net);
     }
 
 retry:

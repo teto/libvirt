@@ -173,11 +173,11 @@ int lxcContainerHasReboot(void)
         virReportSystemError(errno, "%s",
                              _("Unable to clone to check reboot support"));
         return -1;
-    } else if (virProcessWait(cpid, &status) < 0) {
+    } else if (virProcessWait(cpid, &status, false) < 0) {
         return -1;
     }
 
-    if (WEXITSTATUS(status) != 1) {
+    if (status != 1) {
         VIR_DEBUG("Containerized reboot support is missing "
                   "(kernel probably too old < 3.4)");
         return 0;
@@ -744,7 +744,7 @@ static const virLXCBasicMountInfo lxcBasicMounts[] = {
 };
 
 
-static bool lxcIsBasicMountLocation(const char *path)
+bool lxcIsBasicMountLocation(const char *path)
 {
     size_t i;
 
@@ -1823,7 +1823,7 @@ static int lxcContainerChild(void *data)
     if (lxcContainerSetID(vmDef) < 0)
         goto cleanup;
 
-    root = virDomainGetRootFilesystem(vmDef);
+    root = virDomainGetFilesystemForTarget(vmDef, "/");
 
     if (argv->nttyPaths) {
         const char *tty = argv->ttyPaths[0];
@@ -2075,7 +2075,7 @@ int lxcContainerAvailable(int features)
         VIR_DEBUG("clone call returned %s, container support is not enabled",
                   virStrerror(errno, ebuf, sizeof(ebuf)));
         return -1;
-    } else if (virProcessWait(cpid, NULL) < 0) {
+    } else if (virProcessWait(cpid, NULL, false) < 0) {
         return -1;
     }
 

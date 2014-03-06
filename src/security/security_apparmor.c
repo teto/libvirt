@@ -246,6 +246,11 @@ use_apparmor(void)
         return rc;
     }
 
+    /* If libvirt_lxc is calling us, then consider apparmor is used
+     * and enforced. */
+    if (strstr(libvirt_daemon, "libvirt_lxc"))
+        return 1;
+
     if (access(APPARMOR_PROFILES_PATH, R_OK) != 0)
         goto cleanup;
 
@@ -341,15 +346,12 @@ AppArmorSetSecuritySCSILabel(virSCSIDevicePtr dev ATTRIBUTE_UNUSED,
 
 /* Called on libvirtd startup to see if AppArmor is available */
 static int
-AppArmorSecurityManagerProbe(const char *virtDriver)
+AppArmorSecurityManagerProbe(const char *virtDriver ATTRIBUTE_UNUSED)
 {
     char *template = NULL;
     int rc = SECURITY_DRIVER_DISABLE;
 
     if (use_apparmor() < 0)
-        return rc;
-
-    if (virtDriver && STREQ(virtDriver, "LXC"))
         return rc;
 
     /* see if template file exists */
@@ -415,7 +417,8 @@ AppArmorGenSecurityLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     if (!secdef)
         return -1;
 
-    if (secdef->type == VIR_DOMAIN_SECLABEL_STATIC)
+    if ((secdef->type == VIR_DOMAIN_SECLABEL_STATIC) ||
+        (secdef->type == VIR_DOMAIN_SECLABEL_NONE))
         return 0;
 
     if (secdef->baselabel) {
@@ -578,6 +581,9 @@ AppArmorSetSecurityProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     if (!secdef)
         return -1;
 
+    if (secdef->label == NULL)
+        return 0;
+
     if ((profile_name = get_profile_name(def)) == NULL)
         return rc;
 
@@ -591,6 +597,7 @@ AppArmorSetSecurityProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
             goto cleanup;
     }
 
+    VIR_DEBUG("Changing AppArmor profile to %s", profile_name);
     if (aa_change_profile(profile_name) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("error calling aa_change_profile()"));
@@ -616,11 +623,15 @@ AppArmorSetSecurityChildProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
 {
     int rc = -1;
     char *profile_name = NULL;
+    char *cmd_str = NULL;
     virSecurityLabelDefPtr secdef =
         virDomainDefGetSecurityLabelDef(def, SECURITY_APPARMOR_NAME);
 
     if (!secdef)
         goto cleanup;
+
+    if (secdef->label == NULL)
+        return 0;
 
     if (STRNEQ(SECURITY_APPARMOR_NAME, secdef->model)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
@@ -635,11 +646,14 @@ AppArmorSetSecurityChildProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     if ((profile_name = get_profile_name(def)) == NULL)
         goto cleanup;
 
+    cmd_str = virCommandToString(cmd);
+    VIR_DEBUG("Changing AppArmor profile to %s on %s", profile_name, cmd_str);
     virCommandSetAppArmorProfile(cmd, profile_name);
     rc = 0;
 
   cleanup:
     VIR_FREE(profile_name);
+    VIR_FREE(cmd_str);
     return rc;
 }
 

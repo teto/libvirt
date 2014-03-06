@@ -3,6 +3,7 @@
 *.a
 *.cov
 *.exe
+*.exe.manifest
 *.gcda
 *.gcno
 *.gcov
@@ -149,6 +150,7 @@
 /tests/commandtest
 /tests/conftest
 /tests/cputest
+/tests/domainconftest
 /tests/domainsnapshotxml2xmltest
 /tests/esxutilstest
 /tests/eventtest
@@ -157,6 +159,7 @@
 /tests/hashtest
 /tests/jsontest
 /tests/libvirtdconftest
+/tests/lxcconf2xmltest
 /tests/metadatatest
 /tests/networkxml2argvtest
 /tests/nodeinfotest
@@ -193,6 +196,7 @@
 /tests/virauthconfigtest
 /tests/virbitmaptest
 /tests/virbuftest
+/tests/vircapstest
 /tests/vircgrouptest
 /tests/virdbustest
 /tests/virdrivermoduletest
@@ -215,6 +219,7 @@
 /tests/virsystemdtest
 /tests/virtimetest
 /tests/viruritest
+/tests/virusbtest
 /tests/vmwarevertest
 /tests/vmx2xmltest
 /tests/xencapstest

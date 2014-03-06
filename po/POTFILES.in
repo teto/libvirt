@@ -8,6 +8,9 @@ gnulib/lib/gai_strerror.c
 gnulib/lib/regcomp.c
 src/access/viraccessdriverpolkit.c
 src/access/viraccessmanager.c
+src/bhyve/bhyve_command.c
+src/bhyve/bhyve_driver.c
+src/bhyve/bhyve_process.c
 src/conf/capabilities.c
 src/conf/cpu_conf.c
 src/conf/device_conf.c
@@ -62,6 +65,7 @@ src/locking/sanlock_helper.c
 src/lxc/lxc_cgroup.c
 src/lxc/lxc_fuse.c
 src/lxc/lxc_hostdev.c
+src/lxc/lxc_native.c
 src/lxc/lxc_container.c
 src/lxc/lxc_conf.c
 src/lxc/lxc_controller.c
@@ -160,6 +164,7 @@ src/util/vireventpoll.c
 src/util/virfile.c
 src/util/virhash.c
 src/util/virhook.c
+src/util/virhostdev.c
 src/util/viridentity.c
 src/util/virinitctl.c
 src/util/viriptables.c
@@ -188,6 +193,7 @@ src/util/virscsi.c
 src/util/virsocketaddr.c
 src/util/virstatslinux.c
 src/util/virstoragefile.c
+src/util/virstring.c
 src/util/virsysinfo.c
 src/util/virerror.c
 src/util/virerror.h

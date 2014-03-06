@@ -1,7 +1,7 @@
 /*
  * domain_conf.h: domain XML processing
  *
- * Copyright (C) 2006-2013 Red Hat, Inc.
+ * Copyright (C) 2006-2014 Red Hat, Inc.
  * Copyright (C) 2006-2008 Daniel P. Berrange
  *
  * This library is free software; you can redistribute it and/or
@@ -196,6 +196,7 @@ enum virDomainVirtType {
     VIR_DOMAIN_VIRT_VBOX,
     VIR_DOMAIN_VIRT_PHYP,
     VIR_DOMAIN_VIRT_PARALLELS,
+    VIR_DOMAIN_VIRT_BHYVE,
 
     VIR_DOMAIN_VIRT_LAST
 };
@@ -1104,6 +1105,7 @@ enum virDomainChrType {
     VIR_DOMAIN_CHR_TYPE_TCP,
     VIR_DOMAIN_CHR_TYPE_UNIX,
     VIR_DOMAIN_CHR_TYPE_SPICEVMC,
+    VIR_DOMAIN_CHR_TYPE_SPICEPORT,
 
     VIR_DOMAIN_CHR_TYPE_LAST
 };
@@ -1152,6 +1154,9 @@ struct _virDomainChrSourceDef {
             bool listen;
         } nix;
         int spicevmc;
+        struct {
+            char *channel;
+        } spiceport;
     } data;
 };
 
@@ -1235,6 +1240,7 @@ struct _virDomainTPMDef {
 enum virDomainInputType {
     VIR_DOMAIN_INPUT_TYPE_MOUSE,
     VIR_DOMAIN_INPUT_TYPE_TABLET,
+    VIR_DOMAIN_INPUT_TYPE_KBD,
 
     VIR_DOMAIN_INPUT_TYPE_LAST
 };
@@ -1750,6 +1756,7 @@ enum virDomainTimerNameType {
     VIR_DOMAIN_TIMER_NAME_HPET,
     VIR_DOMAIN_TIMER_NAME_TSC,
     VIR_DOMAIN_TIMER_NAME_KVMCLOCK,
+    VIR_DOMAIN_TIMER_NAME_HYPERVCLOCK,
 
     VIR_DOMAIN_TIMER_NAME_LAST
 };
@@ -2109,6 +2116,7 @@ enum virDomainTaintFlags {
     VIR_DOMAIN_TAINT_DISK_PROBING,     /* Relying on potentially unsafe disk format probing */
     VIR_DOMAIN_TAINT_EXTERNAL_LAUNCH,  /* Externally launched guest domain */
     VIR_DOMAIN_TAINT_HOST_CPU,         /* Host CPU passthrough in use */
+    VIR_DOMAIN_TAINT_HOOK,             /* Domain (possibly) changed via hook script */
 
     VIR_DOMAIN_TAINT_LAST
 };
@@ -2247,6 +2255,7 @@ void virDomainDiskHostDefClear(virDomainDiskHostDefPtr def);
 void virDomainDiskHostDefFree(size_t nhosts, virDomainDiskHostDefPtr hosts);
 virDomainDiskHostDefPtr virDomainDiskHostDefCopy(size_t nhosts,
                                                  virDomainDiskHostDefPtr hosts);
+int virDomainDiskGetActualType(virDomainDiskDefPtr def);
 int virDomainDeviceFindControllerModel(virDomainDefPtr def,
                                        virDomainDeviceInfoPtr info,
                                        int controllerType);
@@ -2392,6 +2401,10 @@ int virDomainDiskSourceDefFormatInternal(virBufferPtr buf,
                                          virSecurityDeviceLabelDefPtr *seclabels,
                                          virDomainDiskSourcePoolDefPtr srcpool,
                                          unsigned int flags);
+
+int virDomainNetDefFormat(virBufferPtr buf,
+                          virDomainNetDefPtr def,
+                          unsigned int flags);
 
 int virDomainDefCompatibleDevice(virDomainDefPtr def,
                                  virDomainDeviceDefPtr dev);
@@ -2554,7 +2567,8 @@ int virDiskNameToBusDeviceIndex(virDomainDiskDefPtr disk,
                                 int *busIdx,
                                 int *devIdx);
 
-virDomainFSDefPtr virDomainGetRootFilesystem(virDomainDefPtr def);
+virDomainFSDefPtr virDomainGetFilesystemForTarget(virDomainDefPtr def,
+                                                  const char *path);
 int virDomainFSInsert(virDomainDefPtr def, virDomainFSDefPtr fs);
 int virDomainFSIndexByName(virDomainDefPtr def, const char *name);
 virDomainFSDefPtr virDomainFSRemove(virDomainDefPtr def, size_t i);
@@ -2799,6 +2813,10 @@ virDomainDefMaybeAddController(virDomainDefPtr def,
                                int type,
                                int idx,
                                int model);
+int
+virDomainDefMaybeAddInput(virDomainDefPtr def,
+                          int type,
+                          int bus);
 
 char *virDomainDefGetDefaultEmulator(virDomainDefPtr def, virCapsPtr caps);
 

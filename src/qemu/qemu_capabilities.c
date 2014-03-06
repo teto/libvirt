@@ -1,7 +1,7 @@
 /*
  * qemu_capabilities.c: QEMU capabilities generation
  *
- * Copyright (C) 2006-2013 Red Hat, Inc.
+ * Copyright (C) 2006-2014 Red Hat, Inc.
  * Copyright (C) 2006 Daniel P. Berrange
  *
  * This library is free software; you can redistribute it and/or
@@ -247,7 +247,10 @@ VIR_ENUM_IMPL(virQEMUCaps, QEMU_CAPS_LAST,
               "boot-strict", /* 160 */
               "pvpanic",
               "enable-fips",
-              "spice-file-xfer-disable"
+              "spice-file-xfer-disable",
+              "spiceport",
+
+              "usb-kbd", /* 165 */
     );
 
 struct _virQEMUCaps {
@@ -1012,6 +1015,8 @@ virQEMUCapsComputeCmdFlags(const char *help,
         virQEMUCapsSet(qemuCaps, QEMU_CAPS_CHARDEV);
         if (strstr(help, "-chardev spicevmc"))
             virQEMUCapsSet(qemuCaps, QEMU_CAPS_CHARDEV_SPICEVMC);
+        if (strstr(help, "-chardev spiceport"))
+            virQEMUCapsSet(qemuCaps, QEMU_CAPS_CHARDEV_SPICEPORT);
     }
     if (strstr(help, "-balloon"))
         virQEMUCapsSet(qemuCaps, QEMU_CAPS_BALLOON);
@@ -1400,6 +1405,7 @@ struct virQEMUCapsStringFlags virQEMUCapsObjectTypes[] = {
     { "virtio-mmio", QEMU_CAPS_DEVICE_VIRTIO_MMIO },
     { "ich9-intel-hda", QEMU_CAPS_DEVICE_ICH9_INTEL_HDA },
     { "pvpanic", QEMU_CAPS_DEVICE_PANIC },
+    { "usb-kbd", QEMU_CAPS_DEVICE_USB_KBD },
 };
 
 static struct virQEMUCapsStringFlags virQEMUCapsObjectPropsVirtioBlk[] = {
@@ -2567,6 +2573,12 @@ virQEMUCapsInitQMPMonitor(virQEMUCapsPtr qemuCaps,
     if (qemuCaps->version >= 1003001)
         virQEMUCapsSet(qemuCaps, QEMU_CAPS_VNC_WEBSOCKET);
 
+    /* -chardev spiceport is supported from 1.4.0, but usable through
+     * qapi only since 1.5.0, however, it still cannot be queried
+     * for as a capability */
+    if (qemuCaps->version >= 1005000)
+        virQEMUCapsSet(qemuCaps, QEMU_CAPS_CHARDEV_SPICEPORT);
+
     if (qemuCaps->version >= 1006000)
         virQEMUCapsSet(qemuCaps, QEMU_CAPS_DEVICE_VIDEO_PRIMARY);
 
@@ -2681,6 +2693,7 @@ virQEMUCapsInitQMP(virQEMUCapsPtr qemuCaps,
     virCommandSetGID(cmd, runGid);
     virCommandSetUID(cmd, runUid);
 
+    /* Log, but otherwise ignore, non-zero status.  */
     if (virCommandRun(cmd, &status) < 0)
         goto cleanup;
 
@@ -2742,6 +2755,28 @@ cleanup:
 }
 
 
+#define MESSAGE_ID_CAPS_PROBE_FAILURE "8ae2f3fb-2dbe-498e-8fbd-012d40afa361"
+
+static void
+virQEMUCapsLogProbeFailure(const char *binary)
+{
+    virLogMetadata meta[] = {
+        { .key = "MESSAGE_ID", .s = MESSAGE_ID_CAPS_PROBE_FAILURE, .iv = 0 },
+        { .key = "LIBVIRT_QEMU_BINARY", .s = binary, .iv = 0 },
+        { .key = NULL },
+    };
+    virErrorPtr err = virGetLastError();
+
+    virLogMessage(VIR_LOG_FROM_FILE,
+                  VIR_LOG_WARN,
+                  __FILE__, __LINE__, __func__,
+                  meta,
+                  _("Failed to probe capabilities for %s: %s"),
+                  binary, err && err->message ? err->message :
+                  _("unknown failure"));
+}
+
+
 virQEMUCapsPtr virQEMUCapsNewForBinary(const char *binary,
                                        const char *libDir,
                                        uid_t runUid,
@@ -2773,12 +2808,16 @@ virQEMUCapsPtr virQEMUCapsNewForBinary(const char *binary,
         goto error;
     }
 
-    if ((rv = virQEMUCapsInitQMP(qemuCaps, libDir, runUid, runGid)) < 0)
+    if ((rv = virQEMUCapsInitQMP(qemuCaps, libDir, runUid, runGid)) < 0) {
+        virQEMUCapsLogProbeFailure(binary);
         goto error;
+    }
 
     if (!qemuCaps->usedQMP &&
-        virQEMUCapsInitHelp(qemuCaps, runUid, runGid) < 0)
+        virQEMUCapsInitHelp(qemuCaps, runUid, runGid) < 0) {
+        virQEMUCapsLogProbeFailure(binary);
         goto error;
+    }
 
     return qemuCaps;
 

@@ -122,6 +122,18 @@ int virCgroupMoveTask(virCgroupPtr src_group,
 int virCgroupSetBlkioWeight(virCgroupPtr group, unsigned int weight);
 int virCgroupGetBlkioWeight(virCgroupPtr group, unsigned int *weight);
 
+int virCgroupGetBlkioIoServiced(virCgroupPtr group,
+                                long long *bytes_read,
+                                long long *bytes_write,
+                                long long *requests_read,
+                                long long *requests_write);
+int virCgroupGetBlkioIoDeviceServiced(virCgroupPtr group,
+                                      const char *path,
+                                      long long *bytes_read,
+                                      long long *bytes_write,
+                                      long long *requests_read,
+                                      long long *requests_write);
+
 int virCgroupSetBlkioDeviceWeight(virCgroupPtr group,
                                   const char *path,
                                   unsigned int weight);
@@ -189,6 +201,18 @@ int virCgroupDenyDevicePath(virCgroupPtr group,
                             const char *path,
                             int perms);
 
+int
+virCgroupGetPercpuStats(virCgroupPtr group,
+                        virTypedParameterPtr params,
+                        unsigned int nparams,
+                        int start_cpu,
+                        unsigned int ncpus);
+
+int
+virCgroupGetDomainTotalCpuStats(virCgroupPtr group,
+                                virTypedParameterPtr params,
+                                int nparams);
+
 int virCgroupSetCpuShares(virCgroupPtr group, unsigned long long shares);
 int virCgroupGetCpuShares(virCgroupPtr group, unsigned long long *shares);
 
@@ -224,5 +248,10 @@ int virCgroupIsolateMount(virCgroupPtr group,
                           const char *mountopts);
 
 bool virCgroupSupportsCpuBW(virCgroupPtr cgroup);
+
+int virCgroupSetOwner(virCgroupPtr cgroup,
+                      uid_t uid,
+                      gid_t gid,
+                      int controllers);
 
 #endif /* __VIR_CGROUP_H__ */

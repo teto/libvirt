@@ -1,7 +1,7 @@
 /*
  * virprocess.c: interaction with processes
  *
- * Copyright (C) 2010-2013 Red Hat, Inc.
+ * Copyright (C) 2010-2014 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #if HAVE_SETRLIMIT
 # include <sys/time.h>
@@ -50,6 +51,7 @@
 #include "virlog.h"
 #include "virutil.h"
 #include "virstring.h"
+#include "vircommand.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -153,22 +155,33 @@ virProcessAbort(pid_t pid)
  * virProcessWait:
  * @pid: child to wait on
  * @exitstatus: optional status collection
+ * @raw: whether to pass non-normal status back to caller
  *
- * Wait for a child process to complete.
- * Return -1 on any error waiting for
- * completion. Returns 0 if the command
- * finished with the exit status set.  If @exitstatus is NULL, then the
- * child must exit with status 0 for this to succeed.
+ * Wait for a child process to complete.  If @pid is -1, do nothing, but
+ * return -1 (useful for error cleanup, and assumes an earlier message was
+ * already issued).  All other pids issue an error message on failure.
+ *
+ * If @exitstatus is NULL, then the child must exit normally with status 0.
+ * Otherwise, if @raw is false, the child must exit normally, and
+ * @exitstatus will contain the final exit status (no need for the caller
+ * to use WEXITSTATUS()).  If @raw is true, then the result of waitpid() is
+ * returned in @exitstatus, and the caller must use WIFEXITED() and friends
+ * to decipher the child's status.
+ *
+ * Returns 0 on a successful wait.  Returns -1 on any error waiting for
+ * completion, or if the command completed with a status that cannot be
+ * reflected via the choice of @exitstatus and @raw.
  */
 int
-virProcessWait(pid_t pid, int *exitstatus)
+virProcessWait(pid_t pid, int *exitstatus, bool raw)
 {
     int ret;
     int status;
 
     if (pid <= 0) {
-        virReportSystemError(EINVAL, _("unable to wait for process %lld"),
-                             (long long) pid);
+        if (pid != -1)
+            virReportSystemError(EINVAL, _("unable to wait for process %lld"),
+                                 (long long) pid);
         return -1;
     }
 
@@ -183,19 +196,27 @@ virProcessWait(pid_t pid, int *exitstatus)
     }
 
     if (exitstatus == NULL) {
-        if (status != 0) {
-            char *st = virProcessTranslateStatus(status);
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Child process (%lld) unexpected %s"),
-                           (long long) pid, NULLSTR(st));
-            VIR_FREE(st);
-            return -1;
-        }
-    } else {
+        if (status != 0)
+            goto error;
+    } else if (raw) {
         *exitstatus = status;
+    } else if (WIFEXITED(status)) {
+        *exitstatus = WEXITSTATUS(status);
+    } else {
+        goto error;
     }
 
     return 0;
+
+error:
+    {
+        char *st = virProcessTranslateStatus(status);
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("Child process (%lld) unexpected %s"),
+                       (long long) pid, NULLSTR(st));
+        VIR_FREE(st);
+    }
+    return -1;
 }
 
 
@@ -877,3 +898,141 @@ int virProcessGetStartTime(pid_t pid,
     return 0;
 }
 #endif
+
+
+#ifdef HAVE_SETNS
+static int virProcessNamespaceHelper(int errfd,
+                                     pid_t pid,
+                                     virProcessNamespaceCallback cb,
+                                     void *opaque)
+{
+    char *path;
+    int fd = -1;
+    int ret = -1;
+
+    if (virAsprintf(&path, "/proc/%llu/ns/mnt", (unsigned long long)pid) < 0)
+        goto cleanup;
+
+    if ((fd = open(path, O_RDONLY)) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Kernel does not provide mount namespace"));
+        goto cleanup;
+    }
+
+    if (setns(fd, 0) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Unable to enter mount namespace"));
+        goto cleanup;
+    }
+
+    ret = cb(pid, opaque);
+
+ cleanup:
+    if (ret < 0) {
+        virErrorPtr err = virGetLastError();
+        if (err) {
+            size_t len = strlen(err->message) + 1;
+            ignore_value(safewrite(errfd, err->message, len));
+        }
+    }
+    VIR_FREE(path);
+    VIR_FORCE_CLOSE(fd);
+    return ret;
+}
+
+/* Run cb(opaque) in the mount namespace of pid.  Return -1 with error
+ * message raised if we fail to run the child, if the child dies from
+ * a signal, or if the child has status EXIT_CANCELED; otherwise return
+ * the exit status of the child. The callback will be run in a child
+ * process so must be careful to only use async signal safe functions.
+ */
+int
+virProcessRunInMountNamespace(pid_t pid,
+                              virProcessNamespaceCallback cb,
+                              void *opaque)
+{
+    int ret = -1;
+    pid_t child = -1;
+    int errfd[2] = { -1, -1 };
+
+    if (pipe2(errfd, O_CLOEXEC) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Cannot create pipe for child"));
+        return -1;
+    }
+
+    if ((child = virFork()) < 0)
+        goto cleanup;
+
+    if (child == 0) {
+        VIR_FORCE_CLOSE(errfd[0]);
+        ret = virProcessNamespaceHelper(errfd[1], pid,
+                                        cb, opaque);
+        VIR_FORCE_CLOSE(errfd[1]);
+        _exit(ret < 0 ? EXIT_CANCELED : ret);
+    } else {
+        char *buf = NULL;
+        int status;
+
+        VIR_FORCE_CLOSE(errfd[1]);
+        ignore_value(virFileReadHeaderFD(errfd[0], 1024, &buf));
+        ret = virProcessWait(child, &status, false);
+        if (!ret)
+            ret = status == EXIT_CANCELED ? -1 : status;
+        VIR_FREE(buf);
+    }
+
+cleanup:
+    VIR_FORCE_CLOSE(errfd[0]);
+    VIR_FORCE_CLOSE(errfd[1]);
+    return ret;
+}
+#else /* !HAVE_SETNS */
+int
+virProcessRunInMountNamespace(pid_t pid ATTRIBUTE_UNUSED,
+                              virProcessNamespaceCallback cb ATTRIBUTE_UNUSED,
+                              void *opaque ATTRIBUTE_UNUSED)
+{
+    virReportSystemError(ENOSYS, "%s",
+                         _("Mount namespaces are not available on this platform"));
+    return -1;
+}
+#endif
+
+
+/**
+ * virProcessExitWithStatus:
+ * @status: raw status to be reproduced when this process dies
+ *
+ * Given a raw status obtained by waitpid() or similar, attempt to
+ * make this process exit in the same manner.  If the child died by
+ * signal, reset that signal handler to default and raise the same
+ * signal; if that doesn't kill this process, then exit with 128 +
+ * signal number.  If @status can't be deciphered, use
+ * EXIT_CANNOT_INVOKE.
+ *
+ * Never returns.
+ */
+void
+virProcessExitWithStatus(int status)
+{
+    int value = EXIT_CANNOT_INVOKE;
+
+    if (WIFEXITED(status)) {
+        value = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        struct sigaction act;
+        sigset_t sigs;
+
+        if (sigemptyset(&sigs) == 0 &&
+            sigaddset(&sigs, WTERMSIG(status)) == 0)
+            sigprocmask(SIG_UNBLOCK, &sigs, NULL);
+        memset(&act, 0, sizeof(act));
+        act.sa_handler = SIG_DFL;
+        sigfillset(&act.sa_mask);
+        sigaction(WTERMSIG(status), &act, NULL);
+        raise(WTERMSIG(status));
+        value = 128 + WTERMSIG(status);
+    }
+    exit(value);
+}

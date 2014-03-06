@@ -16,7 +16,7 @@ dnl You should have received a copy of the GNU Lesser General Public
 dnl License along with this library.  If not, see
 dnl <http://www.gnu.org/licenses/>.
 
-AC_INIT([libvirt], [1.2.2], [libvir-list@redhat.com], [], [http://libvirt.org])
+AC_INIT([libvirt], [1.2.3], [libvir-list@redhat.com], [], [http://libvirt.org])
 AC_CONFIG_SRCDIR([src/libvirt.c])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_HEADERS([config.h])
@@ -239,6 +239,7 @@ LIBVIRT_CHECK_SANLOCK
 LIBVIRT_CHECK_SASL
 LIBVIRT_CHECK_SELINUX
 LIBVIRT_CHECK_SSH2
+LIBVIRT_CHECK_SYSTEMD_DAEMON
 LIBVIRT_CHECK_UDEV
 LIBVIRT_CHECK_YAJL
 
@@ -422,6 +423,8 @@ AC_PATH_PROG([OVSVSCTL], [ovs-vsctl], [ovs-vsctl],
 	[/sbin:/usr/sbin:/usr/local/sbin:$PATH])
 AC_PATH_PROG([SCRUB], [scrub], [scrub],
 	[/sbin:/usr/sbin:/usr/local/sbin:$PATH])
+AC_PATH_PROG([ADDR2LINE], [addr2line], [addr2line],
+        [/sbin:/usr/bin:/usr/sbin:/usr/local/sbin:$PATH])
 
 AC_DEFINE_UNQUOTED([DMIDECODE],["$DMIDECODE"],
         [Location or name of the dmidecode program])
@@ -452,6 +455,8 @@ if test -n "$RMMOD"; then
 fi
 AC_DEFINE_UNQUOTED([SCRUB],["$SCRUB"],
         [Location or name of the scrub program (for wiping algorithms)])
+AC_DEFINE_UNQUOTED([ADDR2LINE],["$ADDR2LINE"],
+        [Location of addr2line program])
 
 dnl Specific dir for HTML output ?
 AC_ARG_WITH([html-dir], [AS_HELP_STRING([--with-html-dir=path],
@@ -1048,6 +1053,12 @@ fi
 AM_CONDITIONAL([WITH_PARALLELS], [test "$with_parallels" = "yes"])
 
 dnl
+dnl Checks for bhyve driver
+dnl
+
+LIBVIRT_DRIVER_CHECK_BHYVE
+
+dnl
 dnl check for shell that understands <> redirection without truncation,
 dnl needed by src/qemu/qemu_monitor_{text,json}.c.
 dnl
@@ -1390,8 +1401,10 @@ if test "$with_chrdev_lock_files" != "no"; then
     AC_MSG_ERROR([You must specify path for the lock files on this
 platform])
   fi
-  AC_DEFINE_UNQUOTED([VIR_CHRDEV_LOCK_FILE_PATH], "$with_chrdev_lock_files",
-                      [path to directory containing UUCP device lock files])
+  if test "$with_chrdev_lock_files" != "no"; then
+    AC_DEFINE_UNQUOTED([VIR_CHRDEV_LOCK_FILE_PATH], "$with_chrdev_lock_files",
+                       [path to directory containing UUCP device lock files])
+  fi
 fi
 AM_CONDITIONAL([VIR_CHRDEV_LOCK_FILE_PATH], [test "$with_chrdev_lock_files" != "no"])
 
@@ -1907,7 +1920,6 @@ fi
 AM_CONDITIONAL([WITH_STORAGE_SHEEPDOG],
   [test "$with_storage_sheepdog" = "yes"])
 
-LIBGLUSTER_LIBS=
 if test "$with_storage_gluster" = "check"; then
   with_storage_gluster=$with_glusterfs
 fi
@@ -2471,6 +2483,8 @@ if test "$with_virtualport" != "no"; then
 fi
 AM_CONDITIONAL([WITH_VIRTUALPORT], [test "$with_virtualport" = "yes"])
 
+dnl GET_VLAN_VID_CMD is required for virNetDevGetVLanID
+AC_CHECK_DECLS([GET_VLAN_VID_CMD], [], [], [[#include <linux/if_vlan.h>]])
 
 dnl netlink library
 
@@ -2704,6 +2718,7 @@ AC_MSG_NOTICE([     PHYP: $with_phyp])
 AC_MSG_NOTICE([      ESX: $with_esx])
 AC_MSG_NOTICE([  Hyper-V: $with_hyperv])
 AC_MSG_NOTICE([Parallels: $with_parallels])
+LIBVIRT_DRIVER_RESULT_BHYVE
 AC_MSG_NOTICE([     Test: $with_test])
 AC_MSG_NOTICE([   Remote: $with_remote])
 AC_MSG_NOTICE([  Network: $with_network])
@@ -2761,6 +2776,7 @@ LIBVIRT_RESULT_SANLOCK
 LIBVIRT_RESULT_SASL
 LIBVIRT_RESULT_SELINUX
 LIBVIRT_RESULT_SSH2
+LIBVIRT_RESULT_SYSTEMD_DAEMON
 LIBVIRT_RESULT_UDEV
 LIBVIRT_RESULT_YAJL
 AC_MSG_NOTICE([  libxml: $LIBXML_CFLAGS $LIBXML_LIBS])

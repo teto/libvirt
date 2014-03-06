@@ -198,7 +198,7 @@ static void virLXCProcessCleanup(virLXCDriverPtr driver,
                                 iface->ifname));
             ignore_value(virNetDevVethDelete(iface->ifname));
         }
-        networkReleaseActualDevice(iface);
+        networkReleaseActualDevice(vm->def, iface);
     }
 
     virDomainConfVMNWFilterTeardown(vm);
@@ -374,7 +374,7 @@ static int virLXCProcessSetupInterfaces(virConnectPtr conn,
          * network's pool of devices, or resolve bridge device name
          * to the one defined in the network definition.
          */
-        if (networkAllocateActualDevice(def->nets[i]) < 0)
+        if (networkAllocateActualDevice(def, def->nets[i]) < 0)
             goto cleanup;
 
         if (VIR_EXPAND_N(*veths, *nveths, 1) < 0)
@@ -476,7 +476,7 @@ cleanup:
                 ignore_value(virNetDevOpenvswitchRemovePort(
                                 virDomainNetGetActualBridgeName(iface),
                                 iface->ifname));
-            networkReleaseActualDevice(iface);
+            networkReleaseActualDevice(def, iface);
         }
     }
     return ret;
@@ -697,6 +697,30 @@ int virLXCProcessStop(virLXCDriverPtr driver,
         VIR_FREE(vm->def->seclabels[0]->imagelabel);
     }
 
+    /* If the LXC domain is suspended we send all processes a SIGKILL
+     * and thaw them. Upon wakeup the process sees the pending signal
+     * and dies immediately. It is guaranteed that priv->cgroup != NULL
+     * here because the domain has aleady been suspended using the
+     * freezer cgroup.
+     */
+    if (reason == VIR_DOMAIN_SHUTOFF_DESTROYED &&
+        virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
+        if (virCgroupKillRecursive(priv->cgroup, SIGKILL) <= 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("Unable to kill all processes"));
+            return -1;
+        }
+
+        if (virCgroupSetFreezerState(priv->cgroup, "THAWED") < 0) {
+            virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+                           _("Unable to thaw all processes"));
+
+            return -1;
+        }
+
+        goto cleanup;
+    }
+
     if (priv->cgroup) {
         rc = virCgroupKillPainfully(priv->cgroup);
         if (rc < 0)
@@ -716,6 +740,7 @@ int virLXCProcessStop(virLXCDriverPtr driver,
         }
     }
 
+cleanup:
     virLXCProcessCleanup(driver, vm, reason);
 
     return 0;
@@ -932,7 +957,7 @@ virLXCProcessReadLogOutput(virDomainObjPtr vm,
 static int
 virLXCProcessEnsureRootFS(virDomainObjPtr vm)
 {
-    virDomainFSDefPtr root = virDomainGetRootFilesystem(vm->def);
+    virDomainFSDefPtr root = virDomainGetFilesystemForTarget(vm->def, "/");
 
     if (root)
         return 0;
@@ -1199,12 +1224,19 @@ int virLXCProcessStart(virConnectPtr conn,
         VIR_WARN("Unable to seek to end of logfile: %s",
                  virStrerror(errno, ebuf, sizeof(ebuf)));
 
+    virCommandRawStatus(cmd);
     if (virCommandRun(cmd, &status) < 0)
         goto cleanup;
 
     if (status != 0) {
-        if (virLXCProcessReadLogOutput(vm, logfile, pos, ebuf, sizeof(ebuf)) <= 0)
-            snprintf(ebuf, sizeof(ebuf), "unexpected exit status %d", status);
+        if (virLXCProcessReadLogOutput(vm, logfile, pos, ebuf,
+                                       sizeof(ebuf)) <= 0) {
+            if (WIFEXITED(status))
+                snprintf(ebuf, sizeof(ebuf), _("unexpected exit status %d"),
+                         WEXITSTATUS(status));
+            else
+                snprintf(ebuf, sizeof(ebuf), "%s", _("terminated abnormally"));
+        }
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("guest failed to start: %s"), ebuf);
         goto cleanup;

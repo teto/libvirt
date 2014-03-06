@@ -2,7 +2,7 @@
  * nwfilter_dhcpsnoop.c: support for DHCP snooping used by a VM
  *                       on an interface
  *
- * Copyright (C) 2012-2013 Red Hat, Inc.
+ * Copyright (C) 2012-2014 Red Hat, Inc.
  * Copyright (C) 2011,2012 IBM Corp.
  *
  * Authors:
@@ -250,7 +250,11 @@ struct _virNWFilterDHCPDecodeJob {
 # define DHCP_PKT_BURST         50 /* pkts/sec */
 # define DHCP_BURST_INTERVAL_S  10 /* sec */
 
-# define PCAP_BUFFERSIZE        (DHCP_PKT_BURST * PCAP_PBUFSIZE / 2)
+/*
+ * libpcap 1.5 requires a 128kb buffer
+ * 128 kb is bigger than (DHCP_PKT_BURST * PCAP_PBUFSIZE / 2)
+ */
+# define PCAP_BUFFERSIZE        (128 * 1024)
 
 # define MAX_QUEUED_JOBS        (DHCP_PKT_BURST + 2 * DHCP_PKT_RATE)
 
@@ -265,6 +269,7 @@ struct _virNWFilterSnoopRateLimitConf {
     const unsigned int burstRate;
     const unsigned int burstInterval;
 };
+# define SNOOP_POLL_MAX_TIMEOUT_MS  (10 * 1000) /* milliseconds */
 
 typedef struct _virNWFilterSnoopPcapConf virNWFilterSnoopPcapConf;
 typedef virNWFilterSnoopPcapConf *virNWFilterSnoopPcapConfPtr;
@@ -1112,8 +1117,9 @@ virNWFilterSnoopDHCPOpen(const char *ifname, virMacAddr *mac,
     if (pcap_set_snaplen(handle, PCAP_PBUFSIZE) < 0 ||
         pcap_set_buffer_size(handle, PCAP_BUFFERSIZE) < 0 ||
         pcap_activate(handle) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       _("setup of pcap handle failed"));
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("setup of pcap handle failed: %s"),
+                       pcap_geterr(handle));
         goto cleanup;
     }
 
@@ -1418,6 +1424,10 @@ virNWFilterDHCPSnoopThread(void *req0)
                                        fds, &pollTo) < 0) {
             break;
         }
+
+        /* cap pollTo so we don't hold up the join for too long */
+        if (pollTo < 0 || pollTo > SNOOP_POLL_MAX_TIMEOUT_MS)
+            pollTo = SNOOP_POLL_MAX_TIMEOUT_MS;
 
         n = poll(fds, ARRAY_CARDINALITY(fds), pollTo);
 

@@ -623,12 +623,13 @@ If I<--graceful> is specified, don't resort to extreme measures
 (e.g. SIGKILL) when the guest doesn't stop after a reasonable timeout;
 return an error instead.
 
-=item B<domblkstat> I<domain> I<block-device> [I<--human>]
+=item B<domblkstat> I<domain> [I<block-device>] [I<--human>]
 
 Get device block stats for a running domain.  A I<block-device> corresponds
 to a unique target name (<target dev='name'/>) or source file (<source
 file='name'/>) for one of the disk devices attached to I<domain> (see
-also B<domblklist> for listing these names).
+also B<domblklist> for listing these names). On a lxc domain, omitting the
+I<block-device> yields device block stats summarily for the entire domain.
 
 Use I<--human> for a more human readable output.
 
@@ -680,7 +681,10 @@ or the MAC address.
 If no I<--inbound> or I<--outbound> is specified, this command will
 query and show the bandwidth settings. Otherwise, it will set the
 inbound or outbound bandwidth. I<average,peak,burst> is the same as
-in command I<attach-interface>.
+in command I<attach-interface>.  Values for I<average> and I<peak> are
+expressed in kilobytes per second, while I<burst> is expressed in kilobytes
+in a single burst at -I<peak> speed as described in the Network XML
+documentation at L<http://libvirt.org/formatnetwork.html#elementQoS>.
 
 If I<--live> is specified, affect a running guest.
 If I<--config> is specified, affect the next boot of a persistent guest.
@@ -1042,6 +1046,23 @@ except that it does some error checking.
 
 The editor used can be supplied by the C<$VISUAL> or C<$EDITOR> environment
 variables, and defaults to C<vi>.
+
+=item B<event> {[I<domain>] { I<event> | I<--all> } [I<--loop>]
+[I<--timeout> I<seconds>] | I<--list>}
+
+Wait for a class of domain events to occur, and print appropriate details
+of events as they happen.  The events can optionally be filtered by
+I<domain>.  Using I<--list> as the only argument will provide a list
+of possible I<event> values known by this client, although the connection
+might not allow registering for all these events.  It is also possible
+to use I<--all> instead of I<event> to register for all possible event
+types at once.
+
+By default, this command is one-shot, and returns success once an event
+occurs; you can send SIGINT (usually via C<Ctrl-C>) to quit immediately.
+If I<--timeout> is specified, the command gives up waiting for events
+after I<seconds> have elapsed.   With I<--loop>, the command prints all
+events until a timeout or interrupt key.
 
 =item B<managedsave> I<domain> [I<--bypass-cache>]
 [{I<--running> | I<--paused>}] [I<--verbose>]
@@ -2019,7 +2040,10 @@ of the network interface.  I<script> allows to specify a path to a script
 handling a bridge instead of the default one.  I<model> allows to specify the
 model type.  I<inbound> and I<outbound> control the bandwidth of the interface.
 I<peak> and I<burst> are optional, so "average,peak", "average,,burst" and
-"average" are also legal.
+"average" are also legal. Values for I<average> and I<peak> are
+expressed in kilobytes per second, while I<burst> is expressed in kilobytes
+in a single burst at -I<peak> speed as described in the Network XML
+documentation at L<http://libvirt.org/formatnetwork.html#elementQoS>.
 
 If I<--live> is specified, affect a running domain.
 If I<--config> is specified, affect the next startup of a persistent domain.
@@ -2304,6 +2328,21 @@ except that it does some error checking.
 
 The editor used can be supplied by the C<$VISUAL> or C<$EDITOR> environment
 variables, and defaults to C<vi>.
+
+=item B<net-event> {[I<network>] I<event> [I<--loop>] [I<--timeout>
+I<seconds>] | I<--list>}
+
+Wait for a class of network events to occur, and print appropriate details
+of events as they happen.  The events can optionally be filtered by
+I<network>.  Using I<--list> as the only argument will provide a list
+of possible I<event> values known by this client, although the connection
+might not allow registering for all these events.
+
+By default, this command is one-shot, and returns success once an event
+occurs; you can send SIGINT (usually via C<Ctrl-C>) to quit immediately.
+If I<--timeout> is specified, the command gives up waiting for events
+after I<seconds> have elapsed.   With I<--loop>, the command prints all
+events until a timeout or interrupt key.
 
 =item B<net-info> I<network>
 
@@ -3332,7 +3371,8 @@ Enter the namespace of I<domain> and execute the command C</path/to/binary>
 passing the requested args. The binary path is relative to the container
 root filesystem, not the host root filesystem. The binary will inherit the
 environment variables / console visible to virsh. This command only works
-when connected to the LXC hypervisor driver.
+when connected to the LXC hypervisor driver.  This command succeeds only
+if C</path/to/binary> has 0 exit status.
 
 =back
 
@@ -3447,7 +3487,7 @@ Alternatively report bugs to your software distributor / vendor.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2005, 2007-2010 Red Hat, Inc., and the authors listed in the
+Copyright (C) 2005, 2007-2014 Red Hat, Inc., and the authors listed in the
 libvirt AUTHORS file.
 
 =head1 LICENSE

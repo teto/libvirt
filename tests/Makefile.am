@@ -1,6 +1,6 @@
 ## Process this file with automake to produce Makefile.in
 
-## Copyright (C) 2005-2013 Red Hat, Inc.
+## Copyright (C) 2005-2014 Red Hat, Inc.
 ##
 ## This library is free software; you can redistribute it and/or
 ## modify it under the terms of the GNU Lesser General Public
@@ -65,6 +65,7 @@ EXTRA_DIST =		\
 	commanddata \
 	confdata \
 	cputestdata \
+	domainconfdata \
 	domainschemadata \
 	domainschematest \
 	domainsnapshotschematest \
@@ -72,6 +73,7 @@ EXTRA_DIST =		\
 	domainsnapshotxml2xmlout \
 	fchostdata \
 	interfaceschemadata \
+	lxcconf2xmldata \
 	lxcxml2xmldata \
 	lxcxml2xmloutdata \
 	networkschematest \
@@ -94,6 +96,7 @@ EXTRA_DIST =		\
 	qemuxml2argvdata \
 	qemuxml2xmloutdata \
 	qemuxmlnsdata \
+	secretxml2xmlin \
 	securityselinuxlabeldata \
 	schematestutils.sh \
 	sexpr2xmldata \
@@ -112,6 +115,7 @@ EXTRA_DIST =		\
 	virfiledata \
 	virpcitestdata \
 	virscsidata \
+	virusbtestdata \
 	vmx2xmldata \
 	xencapsdata \
 	xmconfigdata \
@@ -139,11 +143,13 @@ test_programs = virshtest sockettest \
 	virlockspacetest \
 	virlogtest \
 	virstringtest \
-        virportallocatortest \
+	virportallocatortest \
 	sysinfotest \
 	virstoragetest \
 	virnetdevbandwidthtest \
 	virkmodtest \
+	vircapstest \
+	domainconftest \
 	$(NULL)
 
 if WITH_REMOTE
@@ -199,7 +205,7 @@ test_programs += qemuxml2argvtest qemuxml2xmltest qemuxmlnstest \
 endif WITH_QEMU
 
 if WITH_LXC
-test_programs += lxcxml2xmltest
+test_programs += lxcxml2xmltest lxcconf2xmltest
 endif WITH_LXC
 
 if WITH_OPENVZ
@@ -256,6 +262,12 @@ test_programs += cputest
 
 test_programs += metadatatest
 
+test_programs += secretxml2xmltest
+
+if WITH_LINUX
+test_programs += virusbtest
+endif WITH_LINUX
+
 test_scripts = \
 	capabilityschematest \
 	interfaceschematest \
@@ -265,7 +277,8 @@ test_scripts = \
 	domainschematest \
 	nodedevschematest \
 	nwfilterschematest \
-	domainsnapshotschematest
+	domainsnapshotschematest \
+	secretschematest
 
 if WITH_LIBVIRTD
 test_scripts +=				\
@@ -327,12 +340,18 @@ test_libraries = libshunload.la \
 		virpcimock.la \
 		$(NULL)
 if WITH_QEMU
-test_libraries += libqemumonitortestutils.la
+test_libraries += libqemumonitortestutils.la \
+		qemuxml2argvmock.la \
+		$(NULL)
 endif WITH_QEMU
 
 if WITH_DBUS
 test_libraries += virsystemdmock.la
 endif WITH_DBUS
+
+if WITH_LINUX
+test_libraries += virusbmock.la
+endif WITH_LINUX
 
 if WITH_TESTS
 noinst_PROGRAMS = $(test_programs) $(test_helpers)
@@ -431,6 +450,9 @@ qemu_LDADDS = ../src/libvirt_driver_qemu_impl.la
 if WITH_NETWORK
 qemu_LDADDS += ../src/libvirt_driver_network_impl.la
 endif WITH_NETWORK
+if WITH_STORAGE
+qemu_LDADDS += ../src/libvirt_driver_storage_impl.la
+endif WITH_STORAGE
 if WITH_DTRACE_PROBES
 qemu_LDADDS += ../src/libvirt_qemu_probes.lo
 endif WITH_DTRACE_PROBES
@@ -440,6 +462,12 @@ qemuxml2argvtest_SOURCES = \
 	qemuxml2argvtest.c testutilsqemu.c testutilsqemu.h \
 	testutils.c testutils.h
 qemuxml2argvtest_LDADD = $(qemu_LDADDS) $(LIBXML_LIBS)
+
+qemuxml2argvmock_la_SOURCES = \
+	qemuxml2argvmock.c
+qemuxml2argvmock_la_CFLAGS = $(AM_CFLAGS)
+qemuxml2argvmock_la_LDFLAGS = -module -avoid-version \
+	-rpath /evil/libtool/hack/to/force/shared/lib/creation
 
 qemuxml2xmltest_SOURCES = \
 	qemuxml2xmltest.c testutilsqemu.c testutilsqemu.h \
@@ -515,6 +543,11 @@ lxcxml2xmltest_SOURCES = \
 	lxcxml2xmltest.c testutilslxc.c testutilslxc.h \
 	testutils.c testutils.h
 lxcxml2xmltest_LDADD = $(lxc_LDADDS)
+
+lxcconf2xmltest_SOURCES = \
+	lxcconf2xmltest.c \
+	testutils.c testutils.h
+lxcconf2xmltest_LDADD = $(lxc_LDADDS)
 else ! WITH_LXC
 EXTRA_DIST += lxcxml2xmltest.c testutilslxc.c testutilslxc.h
 endif ! WITH_LXC
@@ -595,6 +628,12 @@ nwfilterxml2xmltest_SOURCES = \
 	testutils.c testutils.h
 nwfilterxml2xmltest_LDADD = $(LDADDS)
 
+secretxml2xmltest_SOURCES = \
+	secretxml2xmltest.c \
+	testutils.c testutils.h
+secretxml2xmltest_LDADD = $(LDADDS)
+
+
 if WITH_STORAGE
 storagevolxml2argvtest_SOURCES = \
     storagevolxml2argvtest.c \
@@ -664,6 +703,10 @@ virnetdevbandwidthtest_LDADD = $(LDADDS) $(LIBXML_LIBS)
 virkmodtest_SOURCES = \
 	virkmodtest.c testutils.h testutils.c
 virkmodtest_LDADD = $(LDADDS)
+
+vircapstest_SOURCES = \
+	vircapstest.c testutils.h testutils.c
+vircapstest_LDADD = $(LDADDS)
 
 if WITH_LIBVIRTD
 libvirtdconftest_SOURCES = \
@@ -780,6 +823,19 @@ virpcimock_la_LIBADD = $(GNULIB_LIBS) \
 					   ../src/libvirt.la
 virpcimock_la_LDFLAGS = -module -avoid-version \
         -rpath /evil/libtool/hack/to/force/shared/lib/creation
+
+if WITH_LINUX
+virusbtest_SOURCES = \
+	virusbtest.c testutils.h testutils.c
+virusbtest_LDADD = $(LDADDS)
+
+virusbmock_la_SOURCES = virusbmock.c
+virusbmock_la_CFLAGS = $(AM_CFLAGS)
+virusbmock_la_LDFLAGS = -module -avoid-version \
+        -rpath /evil/libtool/hack/to/force/shared/lib/creation
+else ! WITH_LINUX
+	EXTRA_DIST += virusbtest.c virusbmock.c
+endif ! WITH_LINUX
 
 if WITH_DBUS
 virdbustest_SOURCES = \
@@ -907,6 +963,10 @@ shunloadtest_DEPENDENCIES = libshunload.la
 sysinfotest_SOURCES = \
 	sysinfotest.c testutils.h testutils.c
 sysinfotest_LDADD = $(LDADDS)
+
+domainconftest_SOURCES = \
+	domainconftest.c testutils.h testutils.c
+domainconftest_LDADD = $(LDADDS)
 
 fdstreamtest_SOURCES = \
 	fdstreamtest.c testutils.h testutils.c

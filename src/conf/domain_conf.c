@@ -107,7 +107,8 @@ VIR_ENUM_IMPL(virDomainTaint, VIR_DOMAIN_TAINT_LAST,
               "shell-scripts",
               "disk-probing",
               "external-launch",
-              "host-cpu");
+              "host-cpu",
+              "hook-script");
 
 VIR_ENUM_IMPL(virDomainVirt, VIR_DOMAIN_VIRT_LAST,
               "qemu",
@@ -122,7 +123,8 @@ VIR_ENUM_IMPL(virDomainVirt, VIR_DOMAIN_VIRT_LAST,
               "hyperv",
               "vbox",
               "phyp",
-              "parallels")
+              "parallels",
+              "bhyve")
 
 VIR_ENUM_IMPL(virDomainBoot, VIR_DOMAIN_BOOT_LAST,
               "fd",
@@ -437,7 +439,8 @@ VIR_ENUM_IMPL(virDomainChr, VIR_DOMAIN_CHR_TYPE_LAST,
               "udp",
               "tcp",
               "unix",
-              "spicevmc")
+              "spicevmc",
+              "spiceport")
 
 VIR_ENUM_IMPL(virDomainChrTcpProtocol, VIR_DOMAIN_CHR_TCP_PROTOCOL_LAST,
               "raw",
@@ -505,7 +508,8 @@ VIR_ENUM_IMPL(virDomainVideo, VIR_DOMAIN_VIDEO_TYPE_LAST,
 
 VIR_ENUM_IMPL(virDomainInput, VIR_DOMAIN_INPUT_TYPE_LAST,
               "mouse",
-              "tablet")
+              "tablet",
+              "keyboard")
 
 VIR_ENUM_IMPL(virDomainInputBus, VIR_DOMAIN_INPUT_BUS_LAST,
               "ps2",
@@ -726,7 +730,8 @@ VIR_ENUM_IMPL(virDomainTimerName, VIR_DOMAIN_TIMER_NAME_LAST,
               "rtc",
               "hpet",
               "tsc",
-              "kvmclock");
+              "kvmclock",
+              "hypervclock");
 
 VIR_ENUM_IMPL(virDomainTimerTrack, VIR_DOMAIN_TIMER_TRACK_LAST,
               "boot",
@@ -1343,6 +1348,16 @@ error:
 }
 
 
+int
+virDomainDiskGetActualType(virDomainDiskDefPtr def)
+{
+    if (def->type == VIR_DOMAIN_DISK_TYPE_VOLUME && def->srcpool)
+        return def->srcpool->actualtype;
+
+    return def->type;
+}
+
+
 void virDomainControllerDefFree(virDomainControllerDefPtr def)
 {
     if (!def)
@@ -1581,6 +1596,11 @@ virDomainChrSourceDefIsEqual(const virDomainChrSourceDef *src,
     case VIR_DOMAIN_CHR_TYPE_UNIX:
         return src->data.nix.listen == tgt->data.nix.listen &&
             STREQ_NULLABLE(src->data.nix.path, tgt->data.nix.path);
+        break;
+
+    case VIR_DOMAIN_CHR_TYPE_SPICEPORT:
+        return STREQ_NULLABLE(src->data.spiceport.channel,
+                              tgt->data.spiceport.channel);
         break;
 
     case VIR_DOMAIN_CHR_TYPE_VC:
@@ -2924,6 +2944,62 @@ virDomainDefPostParseInternal(virDomainDefPtr def,
 
     if (virDomainDefRejectDuplicateControllers(def) < 0)
         return -1;
+
+    /* verify settings of guest timers */
+    for (i = 0; i < def->clock.ntimers; i++) {
+        virDomainTimerDefPtr timer = def->clock.timers[i];
+
+        if (timer->name == VIR_DOMAIN_TIMER_NAME_KVMCLOCK ||
+            timer->name == VIR_DOMAIN_TIMER_NAME_HYPERVCLOCK) {
+            if (timer->tickpolicy != -1) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                               _("timer %s doesn't support setting of "
+                                 "timer tickpolicy"),
+                               virDomainTimerNameTypeToString(timer->name));
+                return -1;
+            }
+        }
+
+        if (timer->tickpolicy != VIR_DOMAIN_TIMER_TICKPOLICY_CATCHUP &&
+            (timer->catchup.threshold != 0 ||
+             timer->catchup.limit != 0 ||
+             timer->catchup.slew != 0)) {
+            virReportError(VIR_ERR_XML_ERROR, "%s",
+                           _("setting of timer catchup policies is only "
+                             "supported with tickpolicy='catchup'"));
+            return -1;
+        }
+
+        if (timer->name != VIR_DOMAIN_TIMER_NAME_TSC) {
+            if (timer->frequency != 0) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                               _("timer %s doesn't support setting of "
+                                 "timer frequency"),
+                               virDomainTimerNameTypeToString(timer->name));
+                return -1;
+             }
+
+            if (timer->mode != -1) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                               _("timer %s doesn't support setting of "
+                                 "timer mode"),
+                               virDomainTimerNameTypeToString(timer->name));
+                return -1;
+             }
+        }
+
+        if (timer->name != VIR_DOMAIN_TIMER_NAME_PLATFORM &&
+            timer->name != VIR_DOMAIN_TIMER_NAME_RTC) {
+            if (timer->track != -1) {
+                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                               _("timer %s doesn't support setting of "
+                                 "timer track"),
+                               virDomainTimerNameTypeToString(timer->name));
+                return -1;
+            }
+        }
+    }
+
     return 0;
 }
 
@@ -7084,6 +7160,9 @@ error:
     return ret;
 }
 
+#define SERIAL_CHANNEL_NAME_CHARS \
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-."
+
 /* Parse the source half of the XML definition for a character device,
  * where node is the first element of node->children of the parent
  * element.  def->type must already be valid.  Return -1 on failure,
@@ -7104,6 +7183,7 @@ virDomainChrSourceDefParseXML(virDomainChrSourceDefPtr def,
     char *path = NULL;
     char *mode = NULL;
     char *protocol = NULL;
+    char *channel = NULL;
     int remaining = 0;
 
     while (cur != NULL) {
@@ -7146,6 +7226,11 @@ virDomainChrSourceDefParseXML(virDomainChrSourceDefPtr def,
 
                     if (def->type == VIR_DOMAIN_CHR_TYPE_UDP)
                         VIR_FREE(mode);
+                    break;
+
+                case VIR_DOMAIN_CHR_TYPE_SPICEPORT:
+                    if (!channel)
+                        channel = virXMLPropString(cur, "channel");
                     break;
 
                 case VIR_DOMAIN_CHR_TYPE_LAST:
@@ -7287,6 +7372,21 @@ virDomainChrSourceDefParseXML(virDomainChrSourceDefPtr def,
         def->data.nix.path = path;
         path = NULL;
         break;
+
+    case VIR_DOMAIN_CHR_TYPE_SPICEPORT:
+        if (!channel) {
+            virReportError(VIR_ERR_XML_ERROR, "%s",
+                           _("Missing source channel attribute for char device"));
+            goto error;
+        }
+        if (strspn(channel, SERIAL_CHANNEL_NAME_CHARS) < strlen(channel)) {
+            virReportError(VIR_ERR_INVALID_ARG, "%s",
+                           _("Invalid character in source channel for char device"));
+            goto error;
+        }
+        def->data.spiceport.channel = channel;
+        channel = NULL;
+        break;
     }
 
 cleanup:
@@ -7297,6 +7397,7 @@ cleanup:
     VIR_FREE(connectHost);
     VIR_FREE(connectService);
     VIR_FREE(path);
+    VIR_FREE(channel);
 
     return remaining;
 
@@ -7674,7 +7775,7 @@ error:
 
 /* Parse the XML definition for an input device */
 static virDomainInputDefPtr
-virDomainInputDefParseXML(const char *ostype,
+virDomainInputDefParseXML(const virDomainDef *dom,
                           xmlNodePtr node,
                           unsigned int flags)
 {
@@ -7707,9 +7808,10 @@ virDomainInputDefParseXML(const char *ostype,
             goto error;
         }
 
-        if (STREQ(ostype, "hvm")) {
-            if (def->bus == VIR_DOMAIN_INPUT_BUS_PS2 && /* Only allow mouse for ps2 */
-                def->type != VIR_DOMAIN_INPUT_TYPE_MOUSE) {
+        if (STREQ(dom->os.type, "hvm")) {
+            if (def->bus == VIR_DOMAIN_INPUT_BUS_PS2 &&
+                def->type != VIR_DOMAIN_INPUT_TYPE_MOUSE &&
+                def->type != VIR_DOMAIN_INPUT_TYPE_KBD) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
                                _("ps2 bus does not support %s input device"),
                                type);
@@ -7727,7 +7829,8 @@ virDomainInputDefParseXML(const char *ostype,
                                _("unsupported input bus %s"),
                                bus);
             }
-            if (def->type != VIR_DOMAIN_INPUT_TYPE_MOUSE) {
+            if (def->type != VIR_DOMAIN_INPUT_TYPE_MOUSE &&
+                def->type != VIR_DOMAIN_INPUT_TYPE_KBD) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
                                _("xen bus does not support %s input device"),
                                type);
@@ -7735,11 +7838,14 @@ virDomainInputDefParseXML(const char *ostype,
             }
         }
     } else {
-        if (STREQ(ostype, "hvm")) {
-            if (def->type == VIR_DOMAIN_INPUT_TYPE_MOUSE)
+        if (STREQ(dom->os.type, "hvm")) {
+            if ((def->type == VIR_DOMAIN_INPUT_TYPE_MOUSE ||
+                def->type == VIR_DOMAIN_INPUT_TYPE_KBD) &&
+                (ARCH_IS_X86(dom->os.arch) || dom->os.arch == VIR_ARCH_NONE)) {
                 def->bus = VIR_DOMAIN_INPUT_BUS_PS2;
-            else
+            } else {
                 def->bus = VIR_DOMAIN_INPUT_BUS_USB;
+            }
         } else {
             def->bus = VIR_DOMAIN_INPUT_BUS_XEN;
         }
@@ -9758,7 +9864,7 @@ virDomainDeviceDefParse(const char *xmlStr,
             goto error;
         break;
     case VIR_DOMAIN_DEVICE_INPUT:
-        if (!(dev->data.input = virDomainInputDefParseXML(def->os.type,
+        if (!(dev->data.input = virDomainInputDefParseXML(def,
                                                           node, flags)))
             goto error;
         break;
@@ -9877,19 +9983,7 @@ virDomainHostdevRemove(virDomainDefPtr def, size_t i)
 {
     virDomainHostdevDefPtr hostdev = def->hostdevs[i];
 
-    if (def->nhostdevs > 1) {
-        memmove(def->hostdevs + i,
-                def->hostdevs + i + 1,
-                sizeof(*def->hostdevs) *
-                (def->nhostdevs - (i + 1)));
-        def->nhostdevs--;
-        if (VIR_REALLOC_N(def->hostdevs, def->nhostdevs) < 0) {
-            /* ignore, harmless */
-        }
-    } else {
-        VIR_FREE(def->hostdevs);
-        def->nhostdevs = 0;
-    }
+    VIR_DELETE_ELEMENT(def->hostdevs, i, def->nhostdevs);
     return hostdev;
 }
 
@@ -10957,6 +11051,35 @@ virDomainDefMaybeAddController(virDomainDefPtr def,
 
     if (VIR_APPEND_ELEMENT(def->controllers, def->ncontrollers, cont) < 0) {
         VIR_FREE(cont);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+int
+virDomainDefMaybeAddInput(virDomainDefPtr def,
+                          int type,
+                          int bus)
+{
+    size_t i;
+    virDomainInputDefPtr input;
+
+    for (i = 0; i < def->ninputs; i++) {
+        if (def->inputs[i]->type == type &&
+            def->inputs[i]->bus == bus)
+            return 0;
+    }
+
+    if (VIR_ALLOC(input) < 0)
+        return -1;
+
+    input->type = type;
+    input->bus = bus;
+
+    if (VIR_APPEND_ELEMENT(def->inputs, def->ninputs, input) < 0) {
+        VIR_FREE(input);
         return -1;
     }
 
@@ -12326,7 +12449,7 @@ virDomainDefParseXML(xmlDocPtr xml,
         goto error;
 
     for (i = 0; i < n; i++) {
-        virDomainInputDefPtr input = virDomainInputDefParseXML(def->os.type,
+        virDomainInputDefPtr input = virDomainInputDefParseXML(def,
                                                                nodes[i],
                                                                flags);
         if (!input)
@@ -12346,10 +12469,12 @@ virDomainDefParseXML(xmlDocPtr xml,
          * XXX will this be true for other virt types ? */
         if ((STREQ(def->os.type, "hvm") &&
              input->bus == VIR_DOMAIN_INPUT_BUS_PS2 &&
-             input->type == VIR_DOMAIN_INPUT_TYPE_MOUSE) ||
+             (input->type == VIR_DOMAIN_INPUT_TYPE_MOUSE ||
+              input->type == VIR_DOMAIN_INPUT_TYPE_KBD)) ||
             (STRNEQ(def->os.type, "hvm") &&
              input->bus == VIR_DOMAIN_INPUT_BUS_XEN &&
-             input->type == VIR_DOMAIN_INPUT_TYPE_MOUSE)) {
+             (input->type == VIR_DOMAIN_INPUT_TYPE_MOUSE ||
+              input->type == VIR_DOMAIN_INPUT_TYPE_KBD))) {
             virDomainInputDefFree(input);
             continue;
         }
@@ -12376,28 +12501,23 @@ virDomainDefParseXML(xmlDocPtr xml,
     VIR_FREE(nodes);
 
     /* If graphics are enabled, there's an implicit PS2 mouse */
-    if (def->ngraphics > 0) {
-        virDomainInputDefPtr input;
+    if (def->ngraphics > 0 &&
+        (ARCH_IS_X86(def->os.arch) || def->os.arch == VIR_ARCH_NONE)) {
+        int input_bus = VIR_DOMAIN_INPUT_BUS_XEN;
 
-        if (VIR_ALLOC(input) < 0) {
-            goto error;
-        }
-        if (STREQ(def->os.type, "hvm")) {
-            input->type = VIR_DOMAIN_INPUT_TYPE_MOUSE;
-            input->bus = VIR_DOMAIN_INPUT_BUS_PS2;
-        } else {
-            input->type = VIR_DOMAIN_INPUT_TYPE_MOUSE;
-            input->bus = VIR_DOMAIN_INPUT_BUS_XEN;
-        }
+        if (STREQ(def->os.type, "hvm"))
+            input_bus = VIR_DOMAIN_INPUT_BUS_PS2;
 
-        if (VIR_REALLOC_N(def->inputs, def->ninputs + 1) < 0) {
-            virDomainInputDefFree(input);
+        if (virDomainDefMaybeAddInput(def,
+                                      VIR_DOMAIN_INPUT_TYPE_MOUSE,
+                                      input_bus) < 0)
             goto error;
-        }
-        def->inputs[def->ninputs] = input;
-        def->ninputs++;
+
+        if (virDomainDefMaybeAddInput(def,
+                                      VIR_DOMAIN_INPUT_TYPE_KBD,
+                                      input_bus) < 0)
+            goto error;
     }
-
 
     /* analysis of the sound devices */
     if ((n = virXPathNodeSet("./devices/sound", ctxt, &nodes)) < 0) {
@@ -15307,178 +15427,259 @@ virDomainHostdevDefFormatCaps(virBufferPtr buf,
     return 0;
 }
 
+/* virDomainActualNetDefContentsFormat() - format just the subelements
+ * of <interface> that may be overridden by what is in the
+ * virDomainActualNetDef, but inside the current element, rather
+ * than enclosed in an <actual> subelement.
+ */
 static int
-virDomainActualNetDefFormat(virBufferPtr buf,
-                            virDomainActualNetDefPtr def,
-                            unsigned int flags)
+virDomainActualNetDefContentsFormat(virBufferPtr buf,
+                                    virDomainNetDefPtr def,
+                                    const char *typeStr,
+                                    bool inSubelement,
+                                    unsigned int flags)
 {
-    const char *type;
     const char *mode;
 
-    if (!def)
-        return 0;
-
-    type = virDomainNetTypeToString(def->type);
-    if (!type) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unexpected net type %d"), def->type);
-        return -1;
-    }
-
-    virBufferAsprintf(buf, "<actual type='%s'", type);
-    if (def->type == VIR_DOMAIN_NET_TYPE_HOSTDEV &&
-        def->data.hostdev.def.managed) {
-        virBufferAddLit(buf, " managed='yes'");
-    }
-    virBufferAddLit(buf, ">\n");
-
-    virBufferAdjustIndent(buf, 2);
-    switch (def->type) {
+    switch (virDomainNetGetActualType(def)) {
     case VIR_DOMAIN_NET_TYPE_BRIDGE:
         virBufferEscapeString(buf, "<source bridge='%s'/>\n",
-                              def->data.bridge.brname);
+                              virDomainNetGetActualBridgeName(def));
         break;
 
     case VIR_DOMAIN_NET_TYPE_DIRECT:
         virBufferAddLit(buf, "<source");
-        if (def->data.direct.linkdev)
-            virBufferEscapeString(buf, " dev='%s'",
-                                  def->data.direct.linkdev);
+        virBufferEscapeString(buf, " dev='%s'",
+                              virDomainNetGetActualDirectDev(def));
 
-        mode = virNetDevMacVLanModeTypeToString(def->data.direct.mode);
+        mode = virNetDevMacVLanModeTypeToString(virDomainNetGetActualDirectMode(def));
         if (!mode) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
                            _("unexpected source mode %d"),
-                           def->data.direct.mode);
+                           virDomainNetGetActualDirectMode(def));
             return -1;
         }
         virBufferAsprintf(buf, " mode='%s'/>\n", mode);
         break;
 
     case VIR_DOMAIN_NET_TYPE_HOSTDEV:
-        if (virDomainHostdevDefFormatSubsys(buf, &def->data.hostdev.def,
+        if (virDomainHostdevDefFormatSubsys(buf, virDomainNetGetActualHostdev(def),
                                             flags, true) < 0) {
             return -1;
         }
         break;
 
     case VIR_DOMAIN_NET_TYPE_NETWORK:
-        if (def->class_id)
-            virBufferAsprintf(buf, "<class id='%u'/>", def->class_id);
+        if (!inSubelement) {
+            /* the <source> element isn't included in <actual>
+             * (i.e. when we're putting our output into a subelement
+             * rather than inline) because the main element has the
+             * same info already. If we're outputting inline, though,
+             * we *do* need to output <source>, because the caller
+             * won't have done it.
+             */
+            virBufferEscapeString(buf, "<source network='%s'/>\n",
+                                  def->data.network.name);
+        }
+        if (def->data.network.actual && def->data.network.actual->class_id)
+            virBufferAsprintf(buf, "<class id='%u'/>\n",
+                              def->data.network.actual->class_id);
         break;
     default:
         virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("unexpected net type %s"), type);
+                       _("unexpected actual net type %s"), typeStr);
         return -1;
     }
 
-    if (virNetDevVlanFormat(&def->vlan, buf) < 0)
+    if (virNetDevVlanFormat(virDomainNetGetActualVlan(def), buf) < 0)
         return -1;
-    if (virNetDevVPortProfileFormat(def->virtPortProfile, buf) < 0)
+    if (virNetDevVPortProfileFormat(virDomainNetGetActualVirtPortProfile(def), buf) < 0)
         return -1;
-    if (virNetDevBandwidthFormat(def->bandwidth, buf) < 0)
+    if (virNetDevBandwidthFormat(virDomainNetGetActualBandwidth(def), buf) < 0)
         return -1;
-
-    virBufferAdjustIndent(buf, -2);
-    virBufferAddLit(buf, "</actual>\n");
     return 0;
 }
 
-static int
-virDomainNetDefFormat(virBufferPtr buf,
-                      virDomainNetDefPtr def,
-                      unsigned int flags)
-{
-    const char *type = virDomainNetTypeToString(def->type);
-    char macstr[VIR_MAC_STRING_BUFLEN];
 
-    if (!type) {
+/* virDomainActualNetDefFormat() - format the ActualNetDef
+ * info inside an <actual> element, as required for internal storage
+ * of domain status
+ */
+static int
+virDomainActualNetDefFormat(virBufferPtr buf,
+                            virDomainNetDefPtr def,
+                            unsigned int flags)
+{
+    unsigned int type = virDomainNetGetActualType(def);
+    const char *typeStr = virDomainNetTypeToString(type);
+
+    if (!def)
+        return 0;
+
+    if (!typeStr) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        _("unexpected net type %d"), def->type);
         return -1;
     }
 
-    virBufferAsprintf(buf, "    <interface type='%s'", type);
-    if (def->type == VIR_DOMAIN_NET_TYPE_HOSTDEV &&
-        def->data.hostdev.def.managed) {
-        virBufferAddLit(buf, " managed='yes'");
+    virBufferAsprintf(buf, "<actual type='%s'", typeStr);
+    if (type == VIR_DOMAIN_NET_TYPE_HOSTDEV) {
+        virDomainHostdevDefPtr hostdef = virDomainNetGetActualHostdev(def);
+        if  (hostdef && hostdef->managed)
+            virBufferAddLit(buf, " managed='yes'");
     }
+    virBufferAddLit(buf, ">\n");
+
+    virBufferAdjustIndent(buf, 2);
+    if (virDomainActualNetDefContentsFormat(buf, def, typeStr, true, flags) < 0)
+       return -1;
+    virBufferAdjustIndent(buf, -2);
+    virBufferAddLit(buf, "</actual>\n");
+    return 0;
+}
+
+int
+virDomainNetDefFormat(virBufferPtr buf,
+                      virDomainNetDefPtr def,
+                      unsigned int flags)
+{
+    /* publicActual is true if we should report the current state in
+     * def->data.network.actual *instead of* the config (*not* in
+     * addition to)
+     */
+    unsigned int actualType = virDomainNetGetActualType(def);
+    bool publicActual
+       = (def->type == VIR_DOMAIN_NET_TYPE_NETWORK && def->data.network.actual &&
+          !(flags & (VIR_DOMAIN_XML_INACTIVE | VIR_DOMAIN_XML_INTERNAL_ACTUAL_NET)));
+    const char *typeStr;
+    virDomainHostdevDefPtr hostdef = NULL;
+    char macstr[VIR_MAC_STRING_BUFLEN];
+
+
+    if (publicActual) {
+        if (!(typeStr = virDomainNetTypeToString(actualType))) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("unexpected actual net type %d"), actualType);
+            return -1;
+        }
+        if (actualType == VIR_DOMAIN_NET_TYPE_HOSTDEV)
+            hostdef = virDomainNetGetActualHostdev(def);
+    } else {
+        if (!(typeStr = virDomainNetTypeToString(def->type))) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("unexpected net type %d"), def->type);
+            return -1;
+        }
+        if (def->type == VIR_DOMAIN_NET_TYPE_HOSTDEV)
+            hostdef = &def->data.hostdev.def;
+    }
+
+    virBufferAsprintf(buf, "    <interface type='%s'", typeStr);
+    if (hostdef && hostdef->managed)
+        virBufferAddLit(buf, " managed='yes'");
     virBufferAddLit(buf, ">\n");
 
     virBufferAdjustIndent(buf, 6);
     virBufferAsprintf(buf, "<mac address='%s'/>\n",
                       virMacAddrFormat(&def->mac, macstr));
 
-    switch (def->type) {
-    case VIR_DOMAIN_NET_TYPE_NETWORK:
-        virBufferEscapeString(buf, "<source network='%s'",
-                              def->data.network.name);
-        virBufferEscapeString(buf, " portgroup='%s'",
-                              def->data.network.portgroup);
-        virBufferAddLit(buf, "/>\n");
-        if ((flags & VIR_DOMAIN_XML_INTERNAL_ACTUAL_NET) &&
-            (virDomainActualNetDefFormat(buf, def->data.network.actual, flags) < 0))
+    if (publicActual) {
+        /* when there is a virDomainActualNetDef, and we haven't been
+         * asked to 1) report the domain's inactive XML, or 2) give
+         * the internal version of the ActualNetDef separately in an
+         * <actual> subelement, we can just put the ActualDef data in
+         * the standard place...  (this is for public reporting of
+         * interface status)
+         */
+        if (virDomainActualNetDefContentsFormat(buf, def, typeStr, false, flags) < 0)
             return -1;
-        break;
+    } else {
+        /* ...but if we've asked for the inactive XML (rather than
+         * status), or to report the ActualDef as a separate <actual>
+         * subelement (this is how we privately store interface
+         * status), or there simply *isn't* any ActualNetDef, then
+         * format the NetDef's data here, and optionally format the
+         * ActualNetDef as an <actual> subelement of this element.
+         */
+        switch (def->type) {
+        case VIR_DOMAIN_NET_TYPE_NETWORK:
+            virBufferEscapeString(buf, "<source network='%s'",
+                                  def->data.network.name);
+            virBufferEscapeString(buf, " portgroup='%s'",
+                                  def->data.network.portgroup);
+            virBufferAddLit(buf, "/>\n");
 
-    case VIR_DOMAIN_NET_TYPE_ETHERNET:
-        virBufferEscapeString(buf, "<source dev='%s'/>\n",
-                              def->data.ethernet.dev);
-        if (def->data.ethernet.ipaddr)
-            virBufferAsprintf(buf, "<ip address='%s'/>\n",
-                              def->data.ethernet.ipaddr);
-        break;
+            /* ONLY for internal status storage - format the ActualNetDef
+             * as a subelement of <interface> so that no persistent config
+             * data is overwritten.
+             */
+            if ((flags & VIR_DOMAIN_XML_INTERNAL_ACTUAL_NET) &&
+                (virDomainActualNetDefFormat(buf, def, flags) < 0))
+                return -1;
+            break;
 
-    case VIR_DOMAIN_NET_TYPE_BRIDGE:
-        virBufferEscapeString(buf, "<source bridge='%s'/>\n",
-                              def->data.bridge.brname);
-        if (def->data.bridge.ipaddr) {
-            virBufferAsprintf(buf, "<ip address='%s'/>\n",
-                              def->data.bridge.ipaddr);
+        case VIR_DOMAIN_NET_TYPE_ETHERNET:
+            virBufferEscapeString(buf, "<source dev='%s'/>\n",
+                                  def->data.ethernet.dev);
+            if (def->data.ethernet.ipaddr)
+                virBufferAsprintf(buf, "<ip address='%s'/>\n",
+                                  def->data.ethernet.ipaddr);
+            break;
+
+        case VIR_DOMAIN_NET_TYPE_BRIDGE:
+            virBufferEscapeString(buf, "<source bridge='%s'/>\n",
+                                  def->data.bridge.brname);
+            if (def->data.bridge.ipaddr) {
+                virBufferAsprintf(buf, "<ip address='%s'/>\n",
+                                  def->data.bridge.ipaddr);
+            }
+            break;
+
+        case VIR_DOMAIN_NET_TYPE_SERVER:
+        case VIR_DOMAIN_NET_TYPE_CLIENT:
+        case VIR_DOMAIN_NET_TYPE_MCAST:
+            if (def->data.socket.address) {
+                virBufferAsprintf(buf, "<source address='%s' port='%d'/>\n",
+                                  def->data.socket.address, def->data.socket.port);
+            } else {
+                virBufferAsprintf(buf, "<source port='%d'/>\n",
+                                  def->data.socket.port);
+            }
+            break;
+
+        case VIR_DOMAIN_NET_TYPE_INTERNAL:
+            virBufferEscapeString(buf, "<source name='%s'/>\n",
+                                  def->data.internal.name);
+            break;
+
+        case VIR_DOMAIN_NET_TYPE_DIRECT:
+            virBufferEscapeString(buf, "<source dev='%s'",
+                                  def->data.direct.linkdev);
+            virBufferAsprintf(buf, " mode='%s'",
+                              virNetDevMacVLanModeTypeToString(def->data.direct.mode));
+            virBufferAddLit(buf, "/>\n");
+            break;
+
+        case VIR_DOMAIN_NET_TYPE_HOSTDEV:
+            if (virDomainHostdevDefFormatSubsys(buf, &def->data.hostdev.def,
+                                                flags, true) < 0) {
+                return -1;
+            }
+            break;
+
+        case VIR_DOMAIN_NET_TYPE_USER:
+        case VIR_DOMAIN_NET_TYPE_LAST:
+            break;
         }
-        break;
 
-    case VIR_DOMAIN_NET_TYPE_SERVER:
-    case VIR_DOMAIN_NET_TYPE_CLIENT:
-    case VIR_DOMAIN_NET_TYPE_MCAST:
-        if (def->data.socket.address) {
-            virBufferAsprintf(buf, "<source address='%s' port='%d'/>\n",
-                              def->data.socket.address, def->data.socket.port);
-        } else {
-            virBufferAsprintf(buf, "<source port='%d'/>\n",
-                              def->data.socket.port);
-        }
-        break;
-
-    case VIR_DOMAIN_NET_TYPE_INTERNAL:
-        virBufferEscapeString(buf, "<source name='%s'/>\n",
-                              def->data.internal.name);
-        break;
-
-    case VIR_DOMAIN_NET_TYPE_DIRECT:
-        virBufferEscapeString(buf, "<source dev='%s'",
-                              def->data.direct.linkdev);
-        virBufferAsprintf(buf, " mode='%s'",
-                          virNetDevMacVLanModeTypeToString(def->data.direct.mode));
-        virBufferAddLit(buf, "/>\n");
-        break;
-
-    case VIR_DOMAIN_NET_TYPE_HOSTDEV:
-        if (virDomainHostdevDefFormatSubsys(buf, &def->data.hostdev.def,
-                                            flags, true) < 0) {
+        if (virNetDevVlanFormat(&def->vlan, buf) < 0)
             return -1;
-        }
-        break;
-
-    case VIR_DOMAIN_NET_TYPE_USER:
-    case VIR_DOMAIN_NET_TYPE_LAST:
-        break;
+        if (virNetDevVPortProfileFormat(def->virtPortProfile, buf) < 0)
+            return -1;
+        if (virNetDevBandwidthFormat(def->bandwidth, buf) < 0)
+            return -1;
     }
 
-    if (virNetDevVlanFormat(&def->vlan, buf) < 0)
-        return -1;
-    if (virNetDevVPortProfileFormat(def->virtPortProfile, buf) < 0)
-        return -1;
     virBufferEscapeString(buf, "<script path='%s'/>\n",
                           def->script);
     if (def->ifname &&
@@ -15530,9 +15731,6 @@ virDomainNetDefFormat(virBufferPtr buf,
         virBufferAsprintf(buf, "<link state='%s'/>\n",
                           virDomainNetInterfaceLinkStateTypeToString(def->linkstate));
     }
-
-    if (virNetDevBandwidthFormat(def->bandwidth, buf) < 0)
-        return -1;
 
     virBufferAdjustIndent(buf, -6);
 
@@ -15641,6 +15839,12 @@ virDomainChrSourceDefFormat(virBufferPtr buf,
         virBufferEscapeString(buf, " path='%s'", def->data.nix.path);
         virBufferAddLit(buf, "/>\n");
         break;
+
+    case VIR_DOMAIN_CHR_TYPE_SPICEPORT:
+        virBufferAsprintf(buf, "      <source channel='%s'/>\n",
+                          def->data.spiceport.channel);
+        break;
+
     }
 
     return 0;
@@ -16237,7 +16441,7 @@ virDomainTimerDefFormat(virBufferPtr buf,
         virBufferAddLit(buf, "/>\n");
     } else {
         virBufferAddLit(buf, ">\n");
-        virBufferAddLit(buf, "      <catchup ");
+        virBufferAddLit(buf, "      <catchup");
         if (def->catchup.threshold > 0) {
             virBufferAsprintf(buf, " threshold='%lu'", def->catchup.threshold);
         }
@@ -17408,16 +17612,24 @@ virDomainDefFormatInternal(virDomainDefPtr def,
     }
 
     if (def->ngraphics > 0) {
-        /* If graphics is enabled, add the implicit mouse */
-        virDomainInputDef autoInput = {
-            VIR_DOMAIN_INPUT_TYPE_MOUSE,
-            STREQ(def->os.type, "hvm") ?
-            VIR_DOMAIN_INPUT_BUS_PS2 : VIR_DOMAIN_INPUT_BUS_XEN,
-            { .alias = NULL },
-        };
+        /* If graphics is enabled, add the implicit mouse/keyboard */
+        if ((ARCH_IS_X86(def->os.arch)) || def->os.arch == VIR_ARCH_NONE) {
+            virDomainInputDef autoInput = {
+                VIR_DOMAIN_INPUT_TYPE_MOUSE,
+                STREQ(def->os.type, "hvm") ?
+                VIR_DOMAIN_INPUT_BUS_PS2 : VIR_DOMAIN_INPUT_BUS_XEN,
+                { .alias = NULL },
+            };
 
-        if (virDomainInputDefFormat(buf, &autoInput, flags) < 0)
-            goto error;
+            if (virDomainInputDefFormat(buf, &autoInput, flags) < 0)
+                goto error;
+
+            if (!(flags & VIR_DOMAIN_XML_MIGRATABLE)) {
+                autoInput.type = VIR_DOMAIN_INPUT_TYPE_KBD;
+                if (virDomainInputDefFormat(buf, &autoInput, flags) < 0)
+                    goto error;
+            }
+        }
 
         for (n = 0; n < def->ngraphics; n++)
             if (virDomainGraphicsDefFormat(buf, def->graphics[n], flags) < 0)
@@ -17594,6 +17806,7 @@ virDomainDefCompatibleDevice(virDomainDefPtr def,
                              virDomainDeviceDefPtr dev)
 {
     if (!virDomainDefHasUSB(def) &&
+        STRNEQ(def->os.type, "exe") &&
         virDomainDeviceIsUSB(dev)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
                        _("Device configuration is not compatible: "
@@ -17931,7 +18144,6 @@ virDiskNameToBusDeviceIndex(virDomainDiskDefPtr disk,
     return 0;
 }
 
-
 int
 virDomainFSInsert(virDomainDefPtr def, virDomainFSDefPtr fs)
 {
@@ -17944,30 +18156,18 @@ virDomainFSRemove(virDomainDefPtr def, size_t i)
 {
     virDomainFSDefPtr fs = def->fss[i];
 
-    if (def->nfss > 1) {
-
-        memmove(def->fss + i,
-                def->fss + i + 1,
-                sizeof(*def->fss) *
-                (def->nfss - (i + 1)));
-        def->nfss--;
-        if (VIR_REALLOC_N(def->fss, def->nfss) < 0) {
-            /* ignore, harmless */
-        }
-    } else {
-        VIR_FREE(def->fss);
-        def->nfss = 0;
-    }
+    VIR_DELETE_ELEMENT(def->fss, i, def->nfss);
     return fs;
 }
 
 virDomainFSDefPtr
-virDomainGetRootFilesystem(virDomainDefPtr def)
+virDomainGetFilesystemForTarget(virDomainDefPtr def,
+                                const char *path)
 {
     size_t i;
 
     for (i = 0; i < def->nfss; i++) {
-        if (STREQ(def->fss[i]->dst, "/"))
+        if (STREQ(def->fss[i]->dst, path))
             return def->fss[i];
     }
 
@@ -18516,8 +18716,11 @@ virDomainNetGetActualVirtPortProfile(virDomainNetDefPtr iface)
 virNetDevBandwidthPtr
 virDomainNetGetActualBandwidth(virDomainNetDefPtr iface)
 {
+    /* if there is an ActualNetDef, *always* return
+     * its bandwidth rather than the NetDef's bandwidth.
+     */
     if (iface->type == VIR_DOMAIN_NET_TYPE_NETWORK &&
-        iface->data.network.actual && iface->data.network.actual->bandwidth) {
+        iface->data.network.actual) {
         return iface->data.network.actual->bandwidth;
     }
     return iface->bandwidth;
@@ -18526,13 +18729,18 @@ virDomainNetGetActualBandwidth(virDomainNetDefPtr iface)
 virNetDevVlanPtr
 virDomainNetGetActualVlan(virDomainNetDefPtr iface)
 {
+    virNetDevVlanPtr vlan = &iface->vlan;
+
+    /* if there is an ActualNetDef, *always* return
+     * its vlan rather than the NetDef's vlan.
+     */
     if (iface->type == VIR_DOMAIN_NET_TYPE_NETWORK &&
-        iface->data.network.actual &&
-        iface->data.network.actual->vlan.nTags > 0)
-        return &iface->data.network.actual->vlan;
-    if (iface->vlan.nTags > 0)
-        return &iface->vlan;
-    return 0;
+        iface->data.network.actual)
+        vlan = &iface->data.network.actual->vlan;
+
+    if (vlan->nTags > 0)
+        return vlan;
+    return NULL;
 }
 
 /* Return listens[i] from the appropriate union for the graphics

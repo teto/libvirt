@@ -94,10 +94,9 @@
 #include "virstring.h"
 #include "viraccessapicheck.h"
 #include "viraccessapicheckqemu.h"
+#include "storage/storage_driver.h"
 
 #define VIR_FROM_THIS VIR_FROM_QEMU
-
-#define QEMU_DRIVER_NAME "QEMU"
 
 #define QEMU_NB_MEM_PARAM  3
 
@@ -105,7 +104,6 @@
 
 #define QEMU_NB_NUMA_PARAM 2
 
-#define QEMU_NB_TOTAL_CPU_STAT_PARAM 3
 #define QEMU_NB_PER_CPU_STAT_PARAM 2
 
 #define QEMU_SCHED_MIN_PERIOD              1000LL
@@ -2245,8 +2243,16 @@ static int qemuDomainSetMemoryFlags(virDomainPtr dom, unsigned long newmem,
 
     } else {
         /* resize the current memory */
+        unsigned long oldmax = 0;
 
-        if (newmem > vm->def->mem.max_balloon) {
+        if (flags & VIR_DOMAIN_AFFECT_LIVE)
+            oldmax = vm->def->mem.max_balloon;
+        if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+            if (!oldmax || oldmax > persistentDef->mem.max_balloon)
+                oldmax = persistentDef->mem.max_balloon;
+        }
+
+        if (newmem > oldmax) {
             virReportError(VIR_ERR_INVALID_ARG, "%s",
                            _("cannot set memory higher than max memory"));
             goto endjob;
@@ -4124,6 +4130,7 @@ qemuDomainSetVcpusFlags(virDomainPtr dom, unsigned int nvcpus,
     virDomainDefPtr persistentDef;
     int ret = -1;
     bool maximum;
+    unsigned int maxvcpus = 0;
     virQEMUDriverConfigPtr cfg = NULL;
     virCapsPtr caps = NULL;
     qemuAgentCPUInfoPtr cpuinfo = NULL;
@@ -4171,11 +4178,17 @@ qemuDomainSetVcpusFlags(virDomainPtr dom, unsigned int nvcpus,
         goto endjob;
     }
 
-    if (!maximum && nvcpus > vm->def->maxvcpus) {
+    if (flags & VIR_DOMAIN_AFFECT_LIVE)
+        maxvcpus = vm->def->maxvcpus;
+    if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+        if (!maxvcpus || maxvcpus > persistentDef->maxvcpus)
+            maxvcpus = persistentDef->maxvcpus;
+    }
+    if (!maximum && nvcpus > maxvcpus) {
         virReportError(VIR_ERR_INVALID_ARG,
                        _("requested vcpus is greater than max allowable"
                          " vcpus for the domain: %d > %d"),
-                       nvcpus, vm->def->maxvcpus);
+                       nvcpus, maxvcpus);
         goto endjob;
     }
 
@@ -6499,7 +6512,7 @@ qemuDomainChangeDiskMediaLive(virConnectPtr conn,
     if (qemuTranslateDiskSourcePool(conn, disk) < 0)
         goto end;
 
-    if (qemuDomainDetermineDiskChain(driver, disk, false) < 0)
+    if (qemuDomainDetermineDiskChain(driver, vm, disk, false) < 0)
         goto end;
 
     if (qemuSetupDiskCgroup(vm, disk) < 0)
@@ -6696,9 +6709,8 @@ qemuDomainAttachDeviceConfig(virQEMUCapsPtr qemuCaps,
             return -1;
         }
 
-        if (virDomainFSInsert(vmdef, fs) < 0) {
+        if (virDomainFSInsert(vmdef, fs) < 0)
             return -1;
-        }
         dev->data.fs = NULL;
         break;
 
@@ -6810,7 +6822,6 @@ qemuDomainDetachDeviceConfig(virDomainDefPtr vmdef,
 
         fs = virDomainFSRemove(vmdef, idx);
         virDomainFSDefFree(fs);
-        dev->data.fs = NULL;
         break;
 
     default:
@@ -7421,6 +7432,8 @@ static char *qemuDomainGetSchedulerType(virDomainPtr dom,
     char *ret = NULL;
     virDomainObjPtr vm = NULL;
     qemuDomainObjPrivatePtr priv;
+    virQEMUDriverPtr driver = dom->conn->privateData;
+    virQEMUDriverConfigPtr cfg = NULL;
 
     if (!(vm = qemuDomObjFromDomain(dom)))
         goto cleanup;
@@ -7429,6 +7442,13 @@ static char *qemuDomainGetSchedulerType(virDomainPtr dom,
 
     if (virDomainGetSchedulerTypeEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
+
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
+                       _("CPU tuning is not available in session mode"));
+        goto cleanup;
+    }
 
     /* Domain not running, thus no cgroups - return defaults */
     if (!virDomainObjIsActive(vm)) {
@@ -7456,6 +7476,7 @@ static char *qemuDomainGetSchedulerType(virDomainPtr dom,
 cleanup:
     if (vm)
         virObjectUnlock(vm);
+    virObjectUnref(cfg);
     return ret;
 }
 
@@ -7670,6 +7691,12 @@ qemuDomainSetBlkioParameters(virDomainPtr dom,
     if (virDomainSetBlkioParametersEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
 
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("Block I/O tuning is not available in session mode"));
+        goto cleanup;
+    }
+
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
 
@@ -7850,6 +7877,7 @@ qemuDomainGetBlkioParameters(virDomainPtr dom,
     int ret = -1;
     virCapsPtr caps = NULL;
     qemuDomainObjPrivatePtr priv;
+    virQEMUDriverConfigPtr cfg = NULL;
 
     virCheckFlags(VIR_DOMAIN_AFFECT_LIVE |
                   VIR_DOMAIN_AFFECT_CONFIG |
@@ -7867,6 +7895,13 @@ qemuDomainGetBlkioParameters(virDomainPtr dom,
 
     if (virDomainGetBlkioParametersEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
+
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("Block I/O tuning is not available in session mode"));
+        goto cleanup;
+    }
 
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
@@ -8256,6 +8291,7 @@ cleanup:
     if (vm)
         virObjectUnlock(vm);
     virObjectUnref(caps);
+    virObjectUnref(cfg);
     return ret;
 }
 
@@ -8302,6 +8338,12 @@ qemuDomainSetMemoryParameters(virDomainPtr dom,
 
     if (virDomainSetMemoryParametersEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
+
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
+                       _("Memory tuning is not available in session mode"));
+        goto cleanup;
+    }
 
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
@@ -8410,6 +8452,7 @@ qemuDomainGetMemoryParameters(virDomainPtr dom,
     int ret = -1;
     virCapsPtr caps = NULL;
     qemuDomainObjPrivatePtr priv;
+    virQEMUDriverConfigPtr cfg = NULL;
 
     virCheckFlags(VIR_DOMAIN_AFFECT_LIVE |
                   VIR_DOMAIN_AFFECT_CONFIG |
@@ -8425,6 +8468,13 @@ qemuDomainGetMemoryParameters(virDomainPtr dom,
 
     if (virDomainGetMemoryParametersEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
+
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
+                       _("Memory tuning is not available in session mode"));
+        goto cleanup;
+    }
 
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
@@ -8537,6 +8587,7 @@ cleanup:
     if (vm)
         virObjectUnlock(vm);
     virObjectUnref(caps);
+    virObjectUnref(cfg);
     return ret;
 }
 
@@ -8568,12 +8619,13 @@ qemuDomainSetNumaParamsLive(virDomainObjPtr vm,
 
     for (i = 0; i < caps->host.nnumaCell; i++) {
         bool result;
-        if (virBitmapGetBit(nodeset, i, &result) < 0) {
+        virCapsHostNUMACellPtr cell = caps->host.numaCell[i];
+        if (virBitmapGetBit(nodeset, cell->num, &result) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to get cpuset bit values"));
             goto cleanup;
         }
-        if (result && (virBitmapSetBit(temp_nodeset, i) < 0)) {
+        if (result && (virBitmapSetBit(temp_nodeset, cell->num) < 0)) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to set temporary cpuset bit values"));
             goto cleanup;
@@ -8961,6 +9013,13 @@ qemuDomainSetSchedulerParametersFlags(virDomainPtr dom,
     if (virDomainSetSchedulerParametersFlagsEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
 
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("CPU tuning is not available in session mode"));
+        goto cleanup;
+    }
+
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
 
@@ -9196,6 +9255,7 @@ qemuDomainGetSchedulerParametersFlags(virDomainPtr dom,
     virDomainDefPtr persistentDef;
     virCapsPtr caps = NULL;
     qemuDomainObjPrivatePtr priv;
+    virQEMUDriverConfigPtr cfg = NULL;
 
     virCheckFlags(VIR_DOMAIN_AFFECT_LIVE |
                   VIR_DOMAIN_AFFECT_CONFIG |
@@ -9211,6 +9271,13 @@ qemuDomainGetSchedulerParametersFlags(virDomainPtr dom,
 
     if (virDomainGetSchedulerParametersFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
+
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("CPU tuning is not available in session mode"));
+        goto cleanup;
+    }
 
     if (*nparams > 1)
         cpu_bw_status = virCgroupSupportsCpuBW(priv->cgroup);
@@ -9306,6 +9373,7 @@ cleanup:
     if (vm)
         virObjectUnlock(vm);
     virObjectUnref(caps);
+    virObjectUnref(cfg);
     return ret;
 }
 
@@ -9420,6 +9488,12 @@ qemuDomainBlockStats(virDomainPtr dom,
     virDomainDiskDefPtr disk = NULL;
     qemuDomainObjPrivatePtr priv;
 
+    if (!*path) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
+                       _("summary statistics are not supported yet"));
+        return ret;
+    }
+
     if (!(vm = qemuDomObjFromDomain(dom)))
         goto cleanup;
 
@@ -9492,6 +9566,12 @@ qemuDomainBlockStatsFlags(virDomainPtr dom,
     virTypedParameterPtr param;
 
     virCheckFlags(VIR_TYPED_PARAM_STRING_OKAY, -1);
+
+    if (!*path) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
+                       _("summary statistics are not supported yet"));
+        return ret;
+    }
 
     /* We don't return strings, and thus trivially support this flag.  */
     flags &= ~VIR_TYPED_PARAM_STRING_OKAY;
@@ -11326,12 +11406,16 @@ qemuNodeDeviceReAttach(virNodeDevicePtr dev)
     virObjectLock(driver->inactivePciHostdevs);
     other = virPCIDeviceListFind(driver->activePciHostdevs, pci);
     if (other) {
-        const char *other_name = virPCIDeviceGetUsedBy(other);
+        const char *other_drvname = NULL;
+        const char *other_domname = NULL;
+        virPCIDeviceGetUsedBy(other, &other_drvname, &other_domname);
 
-        if (other_name)
+        if (other_drvname && other_domname)
             virReportError(VIR_ERR_OPERATION_INVALID,
-                           _("PCI device %s is still in use by domain %s"),
-                           virPCIDeviceGetName(pci), other_name);
+                           _("PCI device %s is still in use by "
+                             "driver %s, domain %s"),
+                           virPCIDeviceGetName(pci),
+                           other_drvname, other_domname);
         else
             virReportError(VIR_ERR_OPERATION_INVALID,
                            _("PCI device %s is still in use"),
@@ -11933,6 +12017,24 @@ cleanup:
     return ret;
 }
 
+
+static int
+qemuDomainSnapshotDiskGetSourceString(virDomainSnapshotDiskDefPtr disk,
+                                      char **source)
+{
+    *source = NULL;
+
+    return qemuGetDriveSourceString(virDomainSnapshotDiskGetActualType(disk),
+                                    disk->file,
+                                    disk->protocol,
+                                    disk->nhosts,
+                                    disk->hosts,
+                                    NULL,
+                                    NULL,
+                                    source);
+}
+
+
 typedef enum {
     VIR_DISK_CHAIN_NO_ACCESS,
     VIR_DISK_CHAIN_READ_ONLY,
@@ -12261,7 +12363,7 @@ endjob:
 static int
 qemuDomainSnapshotPrepareDiskExternalBackingInactive(virDomainDiskDefPtr disk)
 {
-    int actualType = qemuDiskGetActualType(disk);
+    int actualType = virDomainDiskGetActualType(disk);
 
     switch ((enum virDomainDiskType) actualType) {
     case VIR_DOMAIN_DISK_TYPE_BLOCK:
@@ -12305,7 +12407,7 @@ qemuDomainSnapshotPrepareDiskExternalBackingInactive(virDomainDiskDefPtr disk)
 static int
 qemuDomainSnapshotPrepareDiskExternalBackingActive(virDomainDiskDefPtr disk)
 {
-    int actualType = qemuDiskGetActualType(disk);
+    int actualType = virDomainDiskGetActualType(disk);
 
     if (actualType == VIR_DOMAIN_DISK_TYPE_BLOCK &&
         disk->device == VIR_DOMAIN_DISK_DEVICE_LUN) {
@@ -12322,7 +12424,7 @@ qemuDomainSnapshotPrepareDiskExternalBackingActive(virDomainDiskDefPtr disk)
 static int
 qemuDomainSnapshotPrepareDiskExternalOverlayActive(virDomainSnapshotDiskDefPtr disk)
 {
-    int actualType = qemuSnapshotDiskGetActualType(disk);
+    int actualType = virDomainSnapshotDiskGetActualType(disk);
 
     switch ((enum virDomainDiskType) actualType) {
     case VIR_DOMAIN_DISK_TYPE_BLOCK:
@@ -12330,6 +12432,29 @@ qemuDomainSnapshotPrepareDiskExternalOverlayActive(virDomainSnapshotDiskDefPtr d
         return 0;
 
     case VIR_DOMAIN_DISK_TYPE_NETWORK:
+        switch ((enum virDomainDiskProtocol) disk->protocol) {
+        case VIR_DOMAIN_DISK_PROTOCOL_GLUSTER:
+            return 0;
+
+        case VIR_DOMAIN_DISK_PROTOCOL_NBD:
+        case VIR_DOMAIN_DISK_PROTOCOL_RBD:
+        case VIR_DOMAIN_DISK_PROTOCOL_SHEEPDOG:
+        case VIR_DOMAIN_DISK_PROTOCOL_ISCSI:
+        case VIR_DOMAIN_DISK_PROTOCOL_HTTP:
+        case VIR_DOMAIN_DISK_PROTOCOL_HTTPS:
+        case VIR_DOMAIN_DISK_PROTOCOL_FTP:
+        case VIR_DOMAIN_DISK_PROTOCOL_FTPS:
+        case VIR_DOMAIN_DISK_PROTOCOL_TFTP:
+        case VIR_DOMAIN_DISK_PROTOCOL_LAST:
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("external active snapshots are not supported on "
+                             "'network' disks using '%s' protocol"),
+                           virDomainDiskProtocolTypeToString(disk->protocol));
+            return -1;
+
+        }
+        break;
+
     case VIR_DOMAIN_DISK_TYPE_DIR:
     case VIR_DOMAIN_DISK_TYPE_VOLUME:
     case VIR_DOMAIN_DISK_TYPE_LAST:
@@ -12346,7 +12471,7 @@ qemuDomainSnapshotPrepareDiskExternalOverlayActive(virDomainSnapshotDiskDefPtr d
 static int
 qemuDomainSnapshotPrepareDiskExternalOverlayInactive(virDomainSnapshotDiskDefPtr disk)
 {
-    int actualType = qemuSnapshotDiskGetActualType(disk);
+    int actualType = virDomainSnapshotDiskGetActualType(disk);
 
     switch ((enum virDomainDiskType) actualType) {
     case VIR_DOMAIN_DISK_TYPE_BLOCK:
@@ -12367,7 +12492,6 @@ qemuDomainSnapshotPrepareDiskExternalOverlayInactive(virDomainSnapshotDiskDefPtr
 }
 
 
-
 static int
 qemuDomainSnapshotPrepareDiskExternal(virConnectPtr conn,
                                       virDomainDiskDefPtr disk,
@@ -12375,7 +12499,8 @@ qemuDomainSnapshotPrepareDiskExternal(virConnectPtr conn,
                                       bool active,
                                       bool reuse)
 {
-    int actualType;
+    virStorageFilePtr snapfile = NULL;
+    int ret = -1;
     struct stat st;
 
     if (qemuTranslateSnapshotDiskSourcePool(conn, snapdisk) < 0)
@@ -12398,40 +12523,34 @@ qemuDomainSnapshotPrepareDiskExternal(virConnectPtr conn,
             return -1;
     }
 
-    actualType = qemuSnapshotDiskGetActualType(snapdisk);
+    if (!(snapfile = virStorageFileInitFromSnapshotDef(snapdisk)))
+        return -1;
 
-    switch ((enum virDomainDiskType) actualType) {
-    case VIR_DOMAIN_DISK_TYPE_BLOCK:
-    case VIR_DOMAIN_DISK_TYPE_FILE:
-        if (stat(snapdisk->file, &st) < 0) {
-            if (errno != ENOENT) {
-                virReportSystemError(errno,
-                                     _("unable to stat for disk %s: %s"),
-                                     snapdisk->name, snapdisk->file);
-                return -1;
-            } else if (reuse) {
-                virReportSystemError(errno,
-                                     _("missing existing file for disk %s: %s"),
-                                     snapdisk->name, snapdisk->file);
-                return -1;
-            }
-        } else if (!S_ISBLK(st.st_mode) && st.st_size && !reuse) {
-            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                           _("external snapshot file for disk %s already "
-                             "exists and is not a block device: %s"),
-                           snapdisk->name, snapdisk->file);
-            return -1;
+    if (virStorageFileStat(snapfile, &st) < 0) {
+        if (errno != ENOENT) {
+            virReportSystemError(errno,
+                                 _("unable to stat for disk %s: %s"),
+                                 snapdisk->name, snapdisk->file);
+            goto cleanup;
+        } else if (reuse) {
+            virReportSystemError(errno,
+                                 _("missing existing file for disk %s: %s"),
+                                 snapdisk->name, snapdisk->file);
+            goto cleanup;
         }
-        break;
-
-    case VIR_DOMAIN_DISK_TYPE_NETWORK:
-    case VIR_DOMAIN_DISK_TYPE_DIR:
-    case VIR_DOMAIN_DISK_TYPE_VOLUME:
-    case VIR_DOMAIN_DISK_TYPE_LAST:
-        break;
+    } else if (!S_ISBLK(st.st_mode) && st.st_size && !reuse) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
+                       _("external snapshot file for disk %s already "
+                         "exists and is not a block device: %s"),
+                       snapdisk->name, snapdisk->file);
+        goto cleanup;
     }
 
-    return 0;
+    ret = 0;
+
+cleanup:
+    virStorageFileFree(snapfile);
+    return ret;
 }
 
 
@@ -12449,7 +12568,7 @@ qemuDomainSnapshotPrepareDiskInternal(virConnectPtr conn,
     if (qemuTranslateDiskSourcePool(conn, disk) < 0)
         return -1;
 
-    actualType = qemuDiskGetActualType(disk);
+    actualType = virDomainDiskGetActualType(disk);
 
     switch ((enum virDomainDiskType) actualType) {
     case VIR_DOMAIN_DISK_TYPE_BLOCK:
@@ -12643,12 +12762,16 @@ qemuDomainSnapshotCreateSingleDiskActive(virQEMUDriverPtr driver,
     qemuDomainObjPrivatePtr priv = vm->privateData;
     char *device = NULL;
     char *source = NULL;
+    char *newsource = NULL;
+    virDomainDiskHostDefPtr newhosts = NULL;
+    virDomainDiskHostDefPtr persistHosts = NULL;
     int format = snap->format;
     const char *formatStr = NULL;
     char *persistSource = NULL;
     int ret = -1;
     int fd = -1;
     bool need_unlink = false;
+    virStorageFilePtr snapfile = NULL;
 
     if (snap->snapshot != VIR_DOMAIN_SNAPSHOT_LOCATION_EXTERNAL) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -12656,8 +12779,7 @@ qemuDomainSnapshotCreateSingleDiskActive(virQEMUDriverPtr driver,
         return -1;
     }
 
-    if (virAsprintf(&device, "drive-%s", disk->info.alias) < 0 ||
-        (persistDisk && VIR_STRDUP(persistSource, source) < 0))
+    if (virAsprintf(&device, "drive-%s", disk->info.alias) < 0)
         goto cleanup;
 
     /* XXX Here, we know we are about to alter disk->backingChain if
@@ -12668,13 +12790,24 @@ qemuDomainSnapshotCreateSingleDiskActive(virQEMUDriverPtr driver,
     virStorageFileFreeMetadata(disk->backingChain);
     disk->backingChain = NULL;
 
+    if (!(snapfile = virStorageFileInitFromSnapshotDef(snap)))
+        goto cleanup;
+
+    if (qemuDomainSnapshotDiskGetSourceString(snap, &source) < 0)
+        goto cleanup;
+
+    if (VIR_STRDUP(newsource, snap->file) < 0)
+        goto cleanup;
+
+    if (persistDisk &&
+        VIR_STRDUP(persistSource, snap->file) < 0)
+        goto cleanup;
+
     switch (snap->type) {
     case VIR_DOMAIN_DISK_TYPE_BLOCK:
         reuse = true;
         /* fallthrough */
     case VIR_DOMAIN_DISK_TYPE_FILE:
-        if (VIR_STRDUP(source, snap->file) < 0)
-            goto cleanup;
 
         /* create the stub file and set selinux labels; manipulate disk in
          * place, in a way that can be reverted on failure. */
@@ -12690,6 +12823,27 @@ qemuDomainSnapshotCreateSingleDiskActive(virQEMUDriverPtr driver,
                                               VIR_DISK_CHAIN_READ_WRITE) < 0) {
             qemuDomainPrepareDiskChainElement(driver, vm, disk, source,
                                               VIR_DISK_CHAIN_NO_ACCESS);
+            goto cleanup;
+        }
+        break;
+
+    case VIR_DOMAIN_DISK_TYPE_NETWORK:
+        switch (snap->protocol) {
+        case VIR_DOMAIN_DISK_PROTOCOL_GLUSTER:
+            if (!(newhosts = virDomainDiskHostDefCopy(snap->nhosts, snap->hosts)))
+                goto cleanup;
+
+            if (persistDisk &&
+                !(persistHosts = virDomainDiskHostDefCopy(snap->nhosts, snap->hosts)))
+                goto cleanup;
+
+            break;
+
+        default:
+            virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
+                           _("snapshots on volumes using '%s' protocol "
+                             "are not supported"),
+                           virDomainDiskProtocolTypeToString(snap->protocol));
             goto cleanup;
         }
         break;
@@ -12729,25 +12883,45 @@ qemuDomainSnapshotCreateSingleDiskActive(virQEMUDriverPtr driver,
 
     /* Update vm in place to match changes.  */
     need_unlink = false;
+
     VIR_FREE(disk->src);
-    disk->src = source;
-    source = NULL;
+    virDomainDiskHostDefFree(disk->nhosts, disk->hosts);
+
+    disk->src = newsource;
     disk->format = format;
     disk->type = snap->type;
+    disk->protocol = snap->protocol;
+    disk->nhosts = snap->nhosts;
+    disk->hosts = newhosts;
+
+    newsource = NULL;
+    newhosts = NULL;
+
     if (persistDisk) {
         VIR_FREE(persistDisk->src);
+        virDomainDiskHostDefFree(persistDisk->nhosts, persistDisk->hosts);
+
         persistDisk->src = persistSource;
-        persistSource = NULL;
         persistDisk->format = format;
         persistDisk->type = snap->type;
+        persistDisk->protocol = snap->protocol;
+        persistDisk->nhosts = snap->nhosts;
+        persistDisk->hosts = persistHosts;
+
+        persistSource = NULL;
+        persistHosts = NULL;
     }
 
 cleanup:
-    if (need_unlink && unlink(source))
+    if (need_unlink && virStorageFileUnlink(snapfile))
         VIR_WARN("unable to unlink just-created %s", source);
+    virStorageFileFree(snapfile);
     VIR_FREE(device);
     VIR_FREE(source);
+    VIR_FREE(newsource);
     VIR_FREE(persistSource);
+    virDomainDiskHostDefFree(snap->nhosts, newhosts);
+    virDomainDiskHostDefFree(snap->nhosts, persistHosts);
     return ret;
 }
 
@@ -12764,7 +12938,10 @@ qemuDomainSnapshotUndoSingleDiskActive(virQEMUDriverPtr driver,
 {
     char *source = NULL;
     char *persistSource = NULL;
+    virStorageFilePtr diskfile = NULL;
     struct stat st;
+
+    diskfile = virStorageFileInitFromDiskDef(disk);
 
     if (VIR_STRDUP(source, origdisk->src) < 0 ||
         (persistDisk && VIR_STRDUP(persistSource, source) < 0))
@@ -12772,8 +12949,9 @@ qemuDomainSnapshotUndoSingleDiskActive(virQEMUDriverPtr driver,
 
     qemuDomainPrepareDiskChainElement(driver, vm, disk, disk->src,
                                       VIR_DISK_CHAIN_NO_ACCESS);
-    if (need_unlink && stat(disk->src, &st) == 0 &&
-        S_ISREG(st.st_mode) && unlink(disk->src) < 0)
+    if (need_unlink && diskfile &&
+        virStorageFileStat(diskfile, &st) == 0 && S_ISREG(st.st_mode) &&
+        virStorageFileUnlink(diskfile) < 0)
         VIR_WARN("Unable to remove just-created %s", disk->src);
 
     /* Update vm in place to match changes.  */
@@ -12782,15 +12960,24 @@ qemuDomainSnapshotUndoSingleDiskActive(virQEMUDriverPtr driver,
     source = NULL;
     disk->format = origdisk->format;
     disk->type = origdisk->type;
+    disk->protocol = origdisk->protocol;
+    virDomainDiskHostDefFree(disk->nhosts, disk->hosts);
+    disk->nhosts = origdisk->nhosts;
+    disk->hosts = virDomainDiskHostDefCopy(origdisk->nhosts, origdisk->hosts);
     if (persistDisk) {
         VIR_FREE(persistDisk->src);
         persistDisk->src = persistSource;
         persistSource = NULL;
         persistDisk->format = origdisk->format;
         persistDisk->type = origdisk->type;
+        persistDisk->protocol = origdisk->protocol;
+        virDomainDiskHostDefFree(persistDisk->nhosts, persistDisk->hosts);
+        persistDisk->nhosts = origdisk->nhosts;
+        persistDisk->hosts = virDomainDiskHostDefCopy(origdisk->nhosts, origdisk->hosts);
     }
 
 cleanup:
+    virStorageFileFree(diskfile);
     VIR_FREE(source);
     VIR_FREE(persistSource);
 }
@@ -13792,12 +13979,13 @@ static int qemuDomainRevertToSnapshot(virDomainSnapshotPtr snapshot,
                          "to revert to inactive snapshot"));
         goto cleanup;
     }
-    if (snap->def->state == VIR_DOMAIN_DISK_SNAPSHOT) {
+
+    if (virDomainSnapshotIsExternal(snap)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
-                       _("revert to external disk snapshot not supported "
-                         "yet"));
+                       _("revert to external snapshot not supported yet"));
         goto cleanup;
     }
+
     if (!(flags & VIR_DOMAIN_SNAPSHOT_REVERT_FORCE)) {
         if (!snap->def->dom) {
             virReportError(VIR_ERR_SNAPSHOT_REVERT_RISKY,
@@ -14634,7 +14822,7 @@ qemuDomainBlockPivot(virConnectPtr conn,
     disk->src = disk->mirror;
     disk->format = disk->mirrorFormat;
     disk->backingChain = NULL;
-    if (qemuDomainDetermineDiskChain(driver, disk, false) < 0) {
+    if (qemuDomainDetermineDiskChain(driver, vm, disk, false) < 0) {
         disk->src = oldsrc;
         disk->format = oldformat;
         disk->backingChain = oldchain;
@@ -14985,7 +15173,7 @@ qemuDomainBlockCopy(virDomainObjPtr vm,
         goto endjob;
     }
 
-    if (qemuDomainDetermineDiskChain(driver, disk, false) < 0)
+    if (qemuDomainDetermineDiskChain(driver, vm, disk, false) < 0)
         goto endjob;
 
     if ((flags & VIR_DOMAIN_BLOCK_REBASE_SHALLOW) &&
@@ -15192,7 +15380,7 @@ qemuDomainBlockCommit(virDomainPtr dom, const char *path, const char *base,
                        disk->dst);
         goto endjob;
     }
-    if (qemuDomainDetermineDiskChain(driver, disk, false) < 0)
+    if (qemuDomainDetermineDiskChain(driver, vm, disk, false) < 0)
         goto endjob;
 
     if (!top) {
@@ -15210,7 +15398,7 @@ qemuDomainBlockCommit(virDomainPtr dom, const char *path, const char *base,
     if (!top_meta || !top_meta->backingStore) {
         virReportError(VIR_ERR_INVALID_ARG,
                        _("top '%s' in chain for '%s' has no backing file"),
-                       top, path);
+                       top_canon, path);
         goto endjob;
     }
     if (!base && (flags & VIR_DOMAIN_BLOCK_COMMIT_SHALLOW)) {
@@ -15391,11 +15579,17 @@ qemuDomainSetBlockIoTune(virDomainPtr dom,
     if (virDomainSetBlockIoTuneEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
 
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("Block I/O tuning is not available in session mode"));
+        goto cleanup;
+    }
+
     if (qemuDomainObjBeginJob(driver, vm, QEMU_JOB_MODIFY) < 0)
         goto cleanup;
 
     priv = vm->privateData;
-    cfg = virQEMUDriverGetConfig(driver);
 
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto endjob;
@@ -15538,6 +15732,7 @@ qemuDomainGetBlockIoTune(virDomainPtr dom,
     int ret = -1;
     size_t i;
     virCapsPtr caps = NULL;
+    virQEMUDriverConfigPtr cfg = NULL;
 
     virCheckFlags(VIR_DOMAIN_AFFECT_LIVE |
                   VIR_DOMAIN_AFFECT_CONFIG |
@@ -15551,6 +15746,13 @@ qemuDomainGetBlockIoTune(virDomainPtr dom,
 
     if (virDomainGetBlockIoTuneEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
+
+    cfg = virQEMUDriverGetConfig(driver);
+    if (!cfg->privileged) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("Block I/O tuning is not available in session mode"));
+        goto cleanup;
+    }
 
     if (!(caps = virQEMUDriverGetCapabilities(driver, false)))
         goto cleanup;
@@ -15654,6 +15856,7 @@ cleanup:
     if (vm)
         virObjectUnlock(vm);
     virObjectUnref(caps);
+    virObjectUnref(cfg);
     return ret;
 }
 
@@ -15798,56 +16001,6 @@ cleanup:
     virObjectUnlock(vm);
     virObjectUnref(caps);
     return ret;
-}
-
-/* qemuDomainGetCPUStats() with start_cpu == -1 */
-static int
-qemuDomainGetTotalcpuStats(virDomainObjPtr vm,
-                           virTypedParameterPtr params,
-                           int nparams)
-{
-    unsigned long long cpu_time;
-    int ret;
-    qemuDomainObjPrivatePtr priv = vm->privateData;
-
-    if (nparams == 0) /* return supported number of params */
-        return QEMU_NB_TOTAL_CPU_STAT_PARAM;
-    /* entry 0 is cputime */
-    ret = virCgroupGetCpuacctUsage(priv->cgroup, &cpu_time);
-    if (ret < 0) {
-        virReportSystemError(-ret, "%s", _("unable to get cpu account"));
-        return -1;
-    }
-
-    if (virTypedParameterAssign(&params[0], VIR_DOMAIN_CPU_STATS_CPUTIME,
-                                VIR_TYPED_PARAM_ULLONG, cpu_time) < 0)
-        return -1;
-
-    if (nparams > 1) {
-        unsigned long long user;
-        unsigned long long sys;
-
-        ret = virCgroupGetCpuacctStat(priv->cgroup, &user, &sys);
-        if (ret < 0) {
-            virReportSystemError(-ret, "%s", _("unable to get cpu account"));
-            return -1;
-        }
-
-        if (virTypedParameterAssign(&params[1],
-                                    VIR_DOMAIN_CPU_STATS_USERTIME,
-                                    VIR_TYPED_PARAM_ULLONG, user) < 0)
-            return -1;
-        if (nparams > 2 &&
-            virTypedParameterAssign(&params[2],
-                                    VIR_DOMAIN_CPU_STATS_SYSTEMTIME,
-                                    VIR_TYPED_PARAM_ULLONG, sys) < 0)
-            return -1;
-
-        if (nparams > QEMU_NB_TOTAL_CPU_STAT_PARAM)
-            nparams = QEMU_NB_TOTAL_CPU_STAT_PARAM;
-    }
-
-    return nparams;
 }
 
 /* This function gets the sums of cpu time consumed by all vcpus.
@@ -16047,7 +16200,8 @@ qemuDomainGetCPUStats(virDomainPtr domain,
     }
 
     if (start_cpu == -1)
-        ret = qemuDomainGetTotalcpuStats(vm, params, nparams);
+        ret = virCgroupGetDomainTotalCpuStats(priv->cgroup,
+                                              params, nparams);
     else
         ret = qemuDomainGetPercpuStats(vm, params, nparams,
                                        start_cpu, ncpus);
@@ -16685,7 +16839,7 @@ static virDriver qemuDriver = {
 
 
 static virStateDriver qemuStateDriver = {
-    .name = "QEMU",
+    .name = QEMU_DRIVER_NAME,
     .stateInitialize = qemuStateInitialize,
     .stateAutoStart = qemuStateAutoStart,
     .stateCleanup = qemuStateCleanup,

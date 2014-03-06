@@ -96,6 +96,9 @@
 #ifdef WITH_PARALLELS
 # include "parallels/parallels_driver.h"
 #endif
+#ifdef WITH_BHYVE
+# include "bhyve/bhyve_driver.h"
+#endif
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -142,15 +145,13 @@ static int
 virConnectAuthGainPolkit(const char *privilege)
 {
     virCommandPtr cmd;
-    int status;
     int ret = -1;
 
     if (geteuid() == 0)
         return 0;
 
     cmd = virCommandNewArgList(POLKIT_AUTH, "--obtain", privilege, NULL);
-    if (virCommandRun(cmd, &status) < 0 ||
-        status > 0)
+    if (virCommandRun(cmd, NULL) < 0)
         goto cleanup;
 
     ret = 0;
@@ -7747,7 +7748,9 @@ error:
  * an unambiguous source name of the block device (the <source
  * file='...'/> sub-element, such as "/path/to/image").  Valid names
  * can be found by calling virDomainGetXMLDesc() and inspecting
- * elements within //domain/devices/disk.
+ * elements within //domain/devices/disk. Some drivers might also
+ * accept the empty string for the @disk parameter, and then yield
+ * summary stats for the entire domain.
  *
  * Domains may have more than one block device.  To get stats for
  * each you should make multiple calls to this function.
@@ -7813,7 +7816,9 @@ error:
  * an unambiguous source name of the block device (the <source
  * file='...'/> sub-element, such as "/path/to/image").  Valid names
  * can be found by calling virDomainGetXMLDesc() and inspecting
- * elements within //domain/devices/disk.
+ * elements within //domain/devices/disk. Some drivers might also
+ * accept the empty string for the @disk parameter, and then yield
+ * summary stats for the entire domain.
  *
  * Domains may have more than one block device.  To get stats for
  * each you should make multiple calls to this function.
@@ -15890,7 +15895,7 @@ error:
  *
  * Send the entire data stream, reading the data from the
  * requested data source. This is simply a convenient alternative
- * to virStreamSend, for apps that do blocking-I/o.
+ * to virStreamSend, for apps that do blocking-I/O.
  *
  * An example using this with a hypothetical file upload
  * API looks like
@@ -15983,7 +15988,7 @@ cleanup:
  *
  * Receive the entire data stream, sending the data to the
  * requested data sink. This is simply a convenient alternative
- * to virStreamRecv, for apps that do blocking-I/o.
+ * to virStreamRecv, for apps that do blocking-I/O.
  *
  * An example using this with a hypothetical file download
  * API looks like
@@ -16192,7 +16197,7 @@ error:
  * virStreamFinish:
  * @stream: pointer to the stream object
  *
- * Indicate that there is no further data is to be transmitted
+ * Indicate that there is no further data to be transmitted
  * on the stream. For output streams this should be called once
  * all data has been written. For input streams this should be
  * called once virStreamRecv returns end-of-file.

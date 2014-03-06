@@ -53,6 +53,8 @@
 #  error "Port me"
 # endif
 
+# define QEMU_DRIVER_NAME "QEMU"
+
 typedef struct _virQEMUDriver virQEMUDriver;
 typedef virQEMUDriver *virQEMUDriverPtr;
 
@@ -305,12 +307,8 @@ int qemuSetUnprivSGIO(virDomainDeviceDefPtr dev);
 int qemuDriverAllocateID(virQEMUDriverPtr driver);
 virDomainXMLOptionPtr virQEMUDriverCreateXMLConf(virQEMUDriverPtr driver);
 
-int qemuDiskGetActualType(virDomainDiskDefPtr def);
-
 int qemuTranslateDiskSourcePool(virConnectPtr conn,
                                 virDomainDiskDefPtr def);
-
-int qemuSnapshotDiskGetActualType(virDomainSnapshotDiskDefPtr def);
 
 int qemuTranslateSnapshotDiskSourcePool(virConnectPtr conn,
                                         virDomainSnapshotDiskDefPtr def);

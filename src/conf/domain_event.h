@@ -149,11 +149,11 @@ virDomainEventTrayChangeNewFromDom(virDomainPtr dom,
 virObjectEventPtr
 virDomainEventPMWakeupNewFromObj(virDomainObjPtr obj);
 virObjectEventPtr
-virDomainEventPMWakeupNewFromDom(virDomainPtr dom);
+virDomainEventPMWakeupNewFromDom(virDomainPtr dom, int reason);
 virObjectEventPtr
 virDomainEventPMSuspendNewFromObj(virDomainObjPtr obj);
 virObjectEventPtr
-virDomainEventPMSuspendNewFromDom(virDomainPtr dom);
+virDomainEventPMSuspendNewFromDom(virDomainPtr dom, int reason);
 
 virObjectEventPtr
 virDomainEventBalloonChangeNewFromDom(virDomainPtr dom,
@@ -165,7 +165,7 @@ virDomainEventBalloonChangeNewFromObj(virDomainObjPtr obj,
 virObjectEventPtr
 virDomainEventPMSuspendDiskNewFromObj(virDomainObjPtr obj);
 virObjectEventPtr
-virDomainEventPMSuspendDiskNewFromDom(virDomainPtr dom);
+virDomainEventPMSuspendDiskNewFromDom(virDomainPtr dom, int reason);
 
 virObjectEventPtr
 virDomainEventDeviceRemovedNewFromObj(virDomainObjPtr obj,
@@ -191,6 +191,28 @@ virDomainEventStateRegisterID(virConnectPtr conn,
                               virFreeCallback freecb,
                               int *callbackID)
     ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(5);
+int
+virDomainEventStateRegisterClient(virConnectPtr conn,
+                                  virObjectEventStatePtr state,
+                                  virDomainPtr dom,
+                                  int eventID,
+                                  virConnectDomainEventGenericCallback cb,
+                                  void *opaque,
+                                  virFreeCallback freecb,
+                                  bool legacy,
+                                  int *callbackID,
+                                  bool remoteID)
+    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(5)
+    ATTRIBUTE_NONNULL(9);
+
+int
+virDomainEventStateCallbackID(virConnectPtr conn,
+                              virObjectEventStatePtr state,
+                              virConnectDomainEventCallback callback,
+                              int *remoteID)
+    ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(2) ATTRIBUTE_NONNULL(3)
+    ATTRIBUTE_NONNULL(4);
+
 int
 virDomainEventStateDeregister(virConnectPtr conn,
                               virObjectEventStatePtr state,

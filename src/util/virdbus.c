@@ -1256,13 +1256,7 @@ int virDBusMessageRead(DBusMessage *msg,
     return ret;
 }
 
-/**
- * virDBusIsServiceEnabled:
- * @name: service name
- *
- * Retruns 0 if service is available, -1 on fatal error, or -2 if service is not available
- */
-int virDBusIsServiceEnabled(const char *name)
+static int virDBusIsServiceInList(const char *listMethod, const char *name)
 {
     DBusConnection *conn;
     DBusMessage *reply = NULL;
@@ -1280,8 +1274,8 @@ int virDBusIsServiceEnabled(const char *name)
                           "org.freedesktop.DBus",
                           "/org/freedesktop/DBus",
                           "org.freedesktop.DBus",
-                          "ListActivatableNames",
-                          DBUS_TYPE_INVALID) < 0)
+                          listMethod,
+                          NULL) < 0)
         return ret;
 
     if (!dbus_message_iter_init(reply, &iter) ||
@@ -1305,13 +1299,40 @@ int virDBusIsServiceEnabled(const char *name)
         }
     }
 
-    VIR_DEBUG("Service %s is %s", name, ret ? "unavailable" : "available");
-
  cleanup:
     dbus_message_unref(reply);
     return ret;
 }
 
+/**
+ * virDBusIsServiceEnabled:
+ * @name: service name
+ *
+ * Returns 0 if service is available, -1 on fatal error, or -2 if service is not available
+ */
+int virDBusIsServiceEnabled(const char *name)
+{
+    int ret = virDBusIsServiceInList("ListActivatableNames", name);
+
+    VIR_DEBUG("Service %s is %s", name, ret ? "unavailable" : "available");
+
+    return ret;
+}
+
+/**
+ * virDBusIsServiceRegistered
+ * @name: service name
+ *
+ * Retruns 0 if service is registered, -1 on fatal error, or -2 if service is not registered
+ */
+int virDBusIsServiceRegistered(const char *name)
+{
+    int ret = virDBusIsServiceInList("ListNames", name);
+
+    VIR_DEBUG("Service %s is %s", name, ret ? "not registered" : "registered");
+
+    return ret;
+}
 
 #else /* ! WITH_DBUS */
 void virDBusSetSharedBus(bool shared ATTRIBUTE_UNUSED)
@@ -1386,6 +1407,12 @@ int virDBusMessageDecode(DBusMessage* msg ATTRIBUTE_UNUSED,
 }
 
 int virDBusIsServiceEnabled(const char *name ATTRIBUTE_UNUSED)
+{
+    VIR_DEBUG("DBus support not compiled into this binary");
+    return -2;
+}
+
+int virDBusIsServiceRegistered(const char *name ATTRIBUTE_UNUSED)
 {
     VIR_DEBUG("DBus support not compiled into this binary");
     return -2;

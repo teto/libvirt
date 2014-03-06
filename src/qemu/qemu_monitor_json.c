@@ -1,7 +1,7 @@
 /*
  * qemu_monitor_json.c: interaction with QEMU monitor console
  *
- * Copyright (C) 2006-2013 Red Hat, Inc.
+ * Copyright (C) 2006-2014 Red Hat, Inc.
  * Copyright (C) 2006 Daniel P. Berrange
  *
  * This library is free software; you can redistribute it and/or
@@ -1220,13 +1220,13 @@ qemuMonitorJSONExtractCPUInfo(virJSONValuePtr reply,
         int thread;
         if (!entry) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                           _("character device information was missing array element"));
+                           _("cpu information was missing an array element"));
             goto cleanup;
         }
 
         if (virJSONValueObjectGetNumberInt(entry, "thread_id", &thread) < 0) {
-            /* Only qemu-kvm tree includs thread_id, so treat this as
-               non-fatal, simply returning no data */
+            /* Some older qemu versions don't report the thread_id,
+             * so treat this as non-fatal, simply returning no data */
             ret = 0;
             goto cleanup;
         }
@@ -3678,8 +3678,12 @@ qemuMonitorJSONBlockJob(qemuMonitorPtr mon,
             virReportError(VIR_ERR_OPERATION_INVALID,
                            _("Command '%s' is not found"), cmd_name);
         } else {
-            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                           _("Unexpected error"));
+            virJSONValuePtr error = virJSONValueObjectGet(reply, "error");
+
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("Unexpected error: (%s) '%s'"),
+                           NULLSTR(virJSONValueObjectGetString(error, "class")),
+                           NULLSTR(virJSONValueObjectGetString(error, "desc")));
         }
     }
 
@@ -5318,6 +5322,7 @@ qemuMonitorJSONAttachCharDevCommand(const char *chrID,
         break;
 
     case VIR_DOMAIN_CHR_TYPE_SPICEVMC:
+    case VIR_DOMAIN_CHR_TYPE_SPICEPORT:
     case VIR_DOMAIN_CHR_TYPE_PIPE:
     case VIR_DOMAIN_CHR_TYPE_STDIO:
     case VIR_DOMAIN_CHR_TYPE_LAST:

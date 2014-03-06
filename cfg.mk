@@ -764,6 +764,7 @@ sc_prohibit_cross_inclusion:
 	    cpu/ | locking/ | network/ | rpc/ | security/)		\
 	      safe="($$dir|util|conf)";;				\
 	    xenapi/ | xenxs/ ) safe="($$dir|util|conf|xen)";;		\
+	    qemu/ ) safe="($$dir|util|conf|cpu|network|locking|rpc|security|storage)";; \
 	    *) safe="($$dir|util|conf|cpu|network|locking|rpc|security)";; \
 	  esac;								\
 	  in_vc_files="^src/$$dir"					\
@@ -940,7 +941,8 @@ exclude_file_name_regexp--sc_bindtextdomain = ^(tests|examples)/
 exclude_file_name_regexp--sc_copyright_usage = \
   ^COPYING(|\.LESSER)$$
 
-exclude_file_name_regexp--sc_flags_usage = ^(docs/|src/util/virnetdevtap\.c$$|tests/vir(cgroup|pci)mock\.c$$)
+exclude_file_name_regexp--sc_flags_usage = \
+  ^(docs/|src/util/virnetdevtap\.c$$|tests/vir(cgroup|pci|usb)mock\.c$$)
 
 exclude_file_name_regexp--sc_libvirt_unmarked_diagnostics = \
   ^(src/rpc/gendispatch\.pl$$|tests/)
@@ -948,7 +950,7 @@ exclude_file_name_regexp--sc_libvirt_unmarked_diagnostics = \
 exclude_file_name_regexp--sc_po_check = ^(docs/|src/rpc/gendispatch\.pl$$)
 
 exclude_file_name_regexp--sc_prohibit_VIR_ERR_NO_MEMORY = \
-  ^(include/libvirt/virterror\.h|daemon/dispatch\.c|src/util/virerror\.c)$$
+  ^(include/libvirt/virterror\.h|daemon/dispatch\.c|src/util/virerror\.c|docs/internals/oomtesting\.html\.in)$$
 
 exclude_file_name_regexp--sc_prohibit_access_xok = ^src/util/virutil\.c$$
 

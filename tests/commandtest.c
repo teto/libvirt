@@ -1,7 +1,7 @@
 /*
  * commandtest.c: Test the libCommand API
  *
- * Copyright (C) 2010-2013 Red Hat, Inc.
+ * Copyright (C) 2010-2014 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 
 #include "testutils.h"
@@ -38,6 +39,7 @@
 #include "virerror.h"
 #include "virthread.h"
 #include "virstring.h"
+#include "virprocess.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
@@ -140,7 +142,13 @@ static int test1(const void *unused ATTRIBUTE_UNUSED)
     cmd = virCommandNew(abs_builddir "/commandhelper-doesnotexist");
     if (virCommandRun(cmd, &status) < 0)
         goto cleanup;
-    if (status == 0)
+    if (status != EXIT_ENOENT)
+        goto cleanup;
+
+    virCommandRawStatus(cmd);
+    if (virCommandRun(cmd, &status) < 0)
+        goto cleanup;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != EXIT_ENOENT)
         goto cleanup;
     ret = 0;
 
@@ -899,6 +907,119 @@ cleanup:
     return ret;
 }
 
+static int
+test22(const void *unused ATTRIBUTE_UNUSED)
+{
+    int ret = -1;
+    virCommandPtr cmd;
+    int status = -1;
+
+    cmd = virCommandNewArgList("/bin/sh", "-c", "exit 3", NULL);
+
+    if (virCommandRun(cmd, &status) < 0) {
+        virErrorPtr err = virGetLastError();
+        printf("Cannot run child %s\n", err->message);
+        goto cleanup;
+    }
+    if (status != 3) {
+        printf("Unexpected status %d\n", status);
+        goto cleanup;
+    }
+
+    virCommandRawStatus(cmd);
+    if (virCommandRun(cmd, &status) < 0) {
+        virErrorPtr err = virGetLastError();
+        printf("Cannot run child %s\n", err->message);
+        goto cleanup;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 3) {
+        printf("Unexpected status %d\n", status);
+        goto cleanup;
+    }
+
+    virCommandFree(cmd);
+    cmd = virCommandNewArgList("/bin/sh", "-c", "kill -9 $$", NULL);
+
+    if (virCommandRun(cmd, &status) == 0) {
+        printf("Death by signal not detected, status %d\n", status);
+        goto cleanup;
+    }
+
+    virCommandRawStatus(cmd);
+    if (virCommandRun(cmd, &status) < 0) {
+        virErrorPtr err = virGetLastError();
+        printf("Cannot run child %s\n", err->message);
+        goto cleanup;
+    }
+    if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL) {
+        printf("Unexpected status %d\n", status);
+        goto cleanup;
+    }
+
+    ret = 0;
+cleanup:
+    virCommandFree(cmd);
+    return ret;
+}
+
+
+static int
+test23(const void *unused ATTRIBUTE_UNUSED)
+{
+    /* Not strictly a virCommand test, but this is the easiest place
+     * to test this lower-level interface.  It takes a double fork to
+     * test virProcessExitWithStatus.  */
+    int ret = -1;
+    int status = -1;
+    pid_t pid;
+
+    if ((pid = virFork()) < 0)
+        goto cleanup;
+    if (pid == 0) {
+        if ((pid = virFork()) < 0)
+            _exit(EXIT_FAILURE);
+        if (pid == 0)
+            _exit(42);
+        if (virProcessWait(pid, &status, true) < 0)
+            _exit(EXIT_FAILURE);
+        virProcessExitWithStatus(status);
+        _exit(EXIT_FAILURE);
+    }
+
+    if (virProcessWait(pid, &status, true) < 0)
+        goto cleanup;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 42) {
+        printf("Unexpected status %d\n", status);
+        goto cleanup;
+    }
+
+    if ((pid = virFork()) < 0)
+        goto cleanup;
+    if (pid == 0) {
+        if ((pid = virFork()) < 0)
+            _exit(EXIT_FAILURE);
+        if (pid == 0) {
+            raise(SIGKILL);
+            _exit(EXIT_FAILURE);
+        }
+        if (virProcessWait(pid, &status, true) < 0)
+            _exit(EXIT_FAILURE);
+        virProcessExitWithStatus(status);
+        _exit(EXIT_FAILURE);
+    }
+
+    if (virProcessWait(pid, &status, true) < 0)
+        goto cleanup;
+    if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL) {
+        printf("Unexpected status %d\n", status);
+        goto cleanup;
+    }
+
+    ret = 0;
+cleanup:
+    return ret;
+}
+
 static void virCommandThreadWorker(void *opaque)
 {
     virCommandTestDataPtr test = opaque;
@@ -1046,6 +1167,8 @@ mymain(void)
     DO_TEST(test19);
     DO_TEST(test20);
     DO_TEST(test21);
+    DO_TEST(test22);
+    DO_TEST(test23);
 
     virMutexLock(&test->lock);
     if (test->running) {

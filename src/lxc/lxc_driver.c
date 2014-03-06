@@ -44,6 +44,7 @@
 #include "lxc_container.h"
 #include "lxc_domain.h"
 #include "lxc_driver.h"
+#include "lxc_native.h"
 #include "lxc_process.h"
 #include "viralloc.h"
 #include "virnetdevbridge.h"
@@ -75,6 +76,8 @@
 
 
 #define LXC_NB_MEM_PARAM  3
+#define LXC_NB_DOMAIN_BLOCK_STAT_PARAM 4
+
 
 static int lxcStateInitialize(bool privileged,
                               virStateInhibitCallback callback,
@@ -986,6 +989,35 @@ cleanup:
     if (vm)
         virObjectUnlock(vm);
     return ret;
+}
+
+static char *lxcConnectDomainXMLFromNative(virConnectPtr conn,
+                                           const char *nativeFormat,
+                                           const char *nativeConfig,
+                                           unsigned int flags)
+{
+    char *xml = NULL;
+    virDomainDefPtr def = NULL;
+
+    virCheckFlags(0, NULL);
+
+    if (virConnectDomainXMLFromNativeEnsureACL(conn) < 0)
+        goto cleanup;
+
+    if (STRNEQ(nativeFormat, LXC_CONFIG_FORMAT)) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("unsupported config type %s"), nativeFormat);
+        goto cleanup;
+    }
+
+    if (!(def = lxcParseConfigString(nativeConfig)))
+        goto cleanup;
+
+    xml = virDomainDefFormat(def, 0);
+
+cleanup:
+    virDomainDefFree(def);
+    return xml;
 }
 
 /**
@@ -2199,6 +2231,198 @@ lxcDomainMergeBlkioDevice(virBlkioDevicePtr *dest_array,
 
 
 static int
+lxcDomainBlockStats(virDomainPtr dom,
+                    const char *path,
+                    struct _virDomainBlockStats *stats)
+{
+    int ret = -1, idx;
+    virDomainObjPtr vm;
+    virDomainDiskDefPtr disk = NULL;
+    virLXCDomainObjPrivatePtr priv;
+
+    if (!(vm = lxcDomObjFromDomain(dom)))
+        return ret;
+
+    priv = vm->privateData;
+
+    if (virDomainBlockStatsEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (!virDomainObjIsActive(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                       "%s", _("domain is not running"));
+        goto cleanup;
+    }
+
+    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_BLKIO)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("blkio cgroup isn't mounted"));
+        goto cleanup;
+    }
+
+    if (!*path) {
+        /* empty path - return entire domain blkstats instead */
+        ret = virCgroupGetBlkioIoServiced(priv->cgroup,
+                                          &stats->rd_bytes,
+                                          &stats->wr_bytes,
+                                          &stats->rd_req,
+                                          &stats->wr_req);
+        goto cleanup;
+    }
+
+    if ((idx = virDomainDiskIndexByName(vm->def, path, false)) < 0) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("invalid path: %s"), path);
+        goto cleanup;
+    }
+    disk = vm->def->disks[idx];
+
+    if (!disk->info.alias) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("missing disk device alias name for %s"), disk->dst);
+        goto cleanup;
+    }
+
+    ret = virCgroupGetBlkioIoDeviceServiced(priv->cgroup,
+                                            disk->info.alias,
+                                            &stats->rd_bytes,
+                                            &stats->wr_bytes,
+                                            &stats->rd_req,
+                                            &stats->wr_req);
+cleanup:
+    if (vm)
+        virObjectUnlock(vm);
+    return ret;
+}
+
+
+static int
+lxcDomainBlockStatsFlags(virDomainPtr dom,
+                         const char * path,
+                         virTypedParameterPtr params,
+                         int * nparams,
+                         unsigned int flags)
+{
+    int tmp, ret = -1, idx;
+    virDomainObjPtr vm;
+    virDomainDiskDefPtr disk = NULL;
+    virLXCDomainObjPrivatePtr priv;
+    long long rd_req, rd_bytes, wr_req, wr_bytes;
+    virTypedParameterPtr param;
+
+    virCheckFlags(VIR_TYPED_PARAM_STRING_OKAY, -1);
+
+    /* We don't return strings, and thus trivially support this flag.  */
+    flags &= ~VIR_TYPED_PARAM_STRING_OKAY;
+
+    if (!params && !*nparams) {
+        *nparams = LXC_NB_DOMAIN_BLOCK_STAT_PARAM;
+        return 0;
+    }
+
+    if (!(vm = lxcDomObjFromDomain(dom)))
+        return ret;
+
+    priv = vm->privateData;
+
+    if (virDomainBlockStatsFlagsEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (!virDomainObjIsActive(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                       "%s", _("domain is not running"));
+        goto cleanup;
+    }
+
+    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_BLKIO)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("blkio cgroup isn't mounted"));
+        goto cleanup;
+    }
+
+    if (!*path) {
+        /* empty path - return entire domain blkstats instead */
+        if (virCgroupGetBlkioIoServiced(priv->cgroup,
+                                        &rd_bytes,
+                                        &wr_bytes,
+                                        &rd_req,
+                                        &wr_req) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           "%s", _("domain stats query failed"));
+            goto cleanup;
+        }
+    } else {
+        if ((idx = virDomainDiskIndexByName(vm->def, path, false)) < 0) {
+            virReportError(VIR_ERR_INVALID_ARG,
+                           _("invalid path: %s"), path);
+            goto cleanup;
+        }
+        disk = vm->def->disks[idx];
+
+        if (!disk->info.alias) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("missing disk device alias name for %s"), disk->dst);
+            goto cleanup;
+        }
+
+        if (virCgroupGetBlkioIoDeviceServiced(priv->cgroup,
+                                              disk->info.alias,
+                                              &rd_bytes,
+                                              &wr_bytes,
+                                              &rd_req,
+                                              &wr_req) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           "%s", _("domain stats query failed"));
+            goto cleanup;
+        }
+    }
+
+    tmp = 0;
+    ret = -1;
+
+    if (tmp < *nparams && wr_bytes != -1) {
+        param = &params[tmp];
+        if (virTypedParameterAssign(param, VIR_DOMAIN_BLOCK_STATS_WRITE_BYTES,
+                                    VIR_TYPED_PARAM_LLONG, wr_bytes) < 0)
+            goto cleanup;
+        tmp++;
+    }
+
+    if (tmp < *nparams && wr_req != -1) {
+        param = &params[tmp];
+        if (virTypedParameterAssign(param, VIR_DOMAIN_BLOCK_STATS_WRITE_REQ,
+                                    VIR_TYPED_PARAM_LLONG, wr_req) < 0)
+            goto cleanup;
+        tmp++;
+    }
+
+    if (tmp < *nparams && rd_bytes != -1) {
+        param = &params[tmp];
+        if (virTypedParameterAssign(param, VIR_DOMAIN_BLOCK_STATS_READ_BYTES,
+                                    VIR_TYPED_PARAM_LLONG, rd_bytes) < 0)
+            goto cleanup;
+        tmp++;
+    }
+
+    if (tmp < *nparams && rd_req != -1) {
+        param = &params[tmp];
+        if (virTypedParameterAssign(param, VIR_DOMAIN_BLOCK_STATS_READ_REQ,
+                                    VIR_TYPED_PARAM_LLONG, rd_req) < 0)
+            goto cleanup;
+        tmp++;
+    }
+
+    ret = 0;
+    *nparams = tmp;
+
+cleanup:
+    if (vm)
+        virObjectUnlock(vm);
+    return ret;
+}
+
+
+static int
 lxcDomainSetBlkioParameters(virDomainPtr dom,
                             virTypedParameterPtr params,
                             int nparams,
@@ -3307,12 +3531,20 @@ lxcConnectListAllDomains(virConnectPtr conn,
 
 
 static int
+lxcDomainInitctlCallback(pid_t pid ATTRIBUTE_UNUSED,
+                         void *opaque)
+{
+    int *command = opaque;
+    return virInitctlSetRunLevel(*command);
+}
+
+
+static int
 lxcDomainShutdownFlags(virDomainPtr dom,
                        unsigned int flags)
 {
     virLXCDomainObjPrivatePtr priv;
     virDomainObjPtr vm;
-    char *vroot = NULL;
     int ret = -1;
     int rc;
 
@@ -3339,16 +3571,14 @@ lxcDomainShutdownFlags(virDomainPtr dom,
         goto cleanup;
     }
 
-    if (virAsprintf(&vroot, "/proc/%llu/root",
-                    (unsigned long long)priv->initpid) < 0)
-        goto cleanup;
-
     if (flags == 0 ||
         (flags & VIR_DOMAIN_SHUTDOWN_INITCTL)) {
-        if ((rc = virInitctlSetRunLevel(VIR_INITCTL_RUNLEVEL_POWEROFF,
-                                        vroot)) < 0) {
+        int command = VIR_INITCTL_RUNLEVEL_POWEROFF;
+
+        if ((rc = virProcessRunInMountNamespace(priv->initpid,
+                                                lxcDomainInitctlCallback,
+                                                &command)) < 0)
             goto cleanup;
-        }
         if (rc == 0 && flags != 0 &&
             ((flags & ~VIR_DOMAIN_SHUTDOWN_INITCTL) == 0)) {
             virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
@@ -3374,7 +3604,6 @@ lxcDomainShutdownFlags(virDomainPtr dom,
     ret = 0;
 
 cleanup:
-    VIR_FREE(vroot);
     if (vm)
         virObjectUnlock(vm);
     return ret;
@@ -3386,13 +3615,13 @@ lxcDomainShutdown(virDomainPtr dom)
     return lxcDomainShutdownFlags(dom, 0);
 }
 
+
 static int
 lxcDomainReboot(virDomainPtr dom,
                 unsigned int flags)
 {
     virLXCDomainObjPrivatePtr priv;
     virDomainObjPtr vm;
-    char *vroot = NULL;
     int ret = -1;
     int rc;
 
@@ -3419,16 +3648,14 @@ lxcDomainReboot(virDomainPtr dom,
         goto cleanup;
     }
 
-    if (virAsprintf(&vroot, "/proc/%llu/root",
-                    (unsigned long long)priv->initpid) < 0)
-        goto cleanup;
-
     if (flags == 0 ||
         (flags & VIR_DOMAIN_REBOOT_INITCTL)) {
-        if ((rc = virInitctlSetRunLevel(VIR_INITCTL_RUNLEVEL_REBOOT,
-                                        vroot)) < 0) {
+        int command = VIR_INITCTL_RUNLEVEL_REBOOT;
+
+        if ((rc = virProcessRunInMountNamespace(priv->initpid,
+                                                lxcDomainInitctlCallback,
+                                                &command)) < 0)
             goto cleanup;
-        }
         if (rc == 0 && flags != 0 &&
             ((flags & ~VIR_DOMAIN_SHUTDOWN_INITCTL) == 0)) {
             virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
@@ -3454,7 +3681,6 @@ lxcDomainReboot(virDomainPtr dom,
     ret = 0;
 
 cleanup:
-    VIR_FREE(vroot);
     if (vm)
         virObjectUnlock(vm);
     return ret;
@@ -3625,6 +3851,155 @@ cleanup:
 }
 
 
+struct lxcDomainAttachDeviceMknodData {
+    virLXCDriverPtr driver;
+    mode_t mode;
+    dev_t dev;
+    virDomainObjPtr vm;
+    virDomainDeviceDefPtr def;
+    char *file;
+};
+
+static int
+lxcDomainAttachDeviceMknodHelper(pid_t pid ATTRIBUTE_UNUSED,
+                                 void *opaque)
+{
+    struct lxcDomainAttachDeviceMknodData *data = opaque;
+    int ret = -1;
+
+    virSecurityManagerPostFork(data->driver->securityManager);
+
+    if (virFileMakeParentPath(data->file) < 0) {
+        virReportSystemError(errno,
+                             _("Unable to create %s"), data->file);
+        goto cleanup;
+    }
+
+    /* Yes, the device name we're creating may not
+     * actually correspond to the major:minor number
+     * we're using, but we've no other option at this
+     * time. Just have to hope that containerized apps
+     * don't get upset that the major:minor is different
+     * to that normally implied by the device name
+     */
+    VIR_DEBUG("Creating dev %s (%d,%d)",
+              data->file, major(data->dev), minor(data->dev));
+    if (mknod(data->file, data->mode, data->dev) < 0) {
+        virReportSystemError(errno,
+                             _("Unable to create device %s"),
+                             data->file);
+        goto cleanup;
+    }
+
+    if (lxcContainerChown(data->vm->def, data->file) < 0)
+        goto cleanup;
+
+    /* Labelling normally operates on src, but we need
+     * to actually label the dst here, so hack the config */
+    switch (data->def->type) {
+    case VIR_DOMAIN_DEVICE_DISK: {
+        virDomainDiskDefPtr def = data->def->data.disk;
+        char *tmpsrc = def->src;
+        def->src = data->file;
+        if (virSecurityManagerSetImageLabel(data->driver->securityManager,
+                                            data->vm->def, def) < 0) {
+            def->src = tmpsrc;
+            goto cleanup;
+        }
+        def->src = tmpsrc;
+    }   break;
+
+    case VIR_DOMAIN_DEVICE_HOSTDEV: {
+        virDomainHostdevDefPtr def = data->def->data.hostdev;
+        if (virSecurityManagerSetHostdevLabel(data->driver->securityManager,
+                                              data->vm->def, def, NULL) < 0)
+            goto cleanup;
+    }   break;
+
+    default:
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("Unexpected device type %d"),
+                       data->def->type);
+        goto cleanup;
+    }
+
+    ret = 0;
+
+ cleanup:
+    if (ret < 0)
+        unlink(data->file);
+    return ret;
+}
+
+
+static int
+lxcDomainAttachDeviceMknod(virLXCDriverPtr driver,
+                           mode_t mode,
+                           dev_t dev,
+                           virDomainObjPtr vm,
+                           virDomainDeviceDefPtr def,
+                           char *file)
+{
+    virLXCDomainObjPrivatePtr priv = vm->privateData;
+    struct lxcDomainAttachDeviceMknodData data;
+
+    memset(&data, 0, sizeof(data));
+
+    data.driver = driver;
+    data.mode = mode;
+    data.dev = dev;
+    data.vm = vm;
+    data.def = def;
+    data.file = file;
+
+    if (virSecurityManagerPreFork(driver->securityManager) < 0)
+        return -1;
+
+    if (virProcessRunInMountNamespace(priv->initpid,
+                                      lxcDomainAttachDeviceMknodHelper,
+                                      &data) < 0) {
+        virSecurityManagerPostFork(driver->securityManager);
+        return -1;
+    }
+
+    virSecurityManagerPostFork(driver->securityManager);
+    return 0;
+}
+
+
+static int
+lxcDomainAttachDeviceUnlinkHelper(pid_t pid ATTRIBUTE_UNUSED,
+                                  void *opaque)
+{
+    const char *path = opaque;
+
+    VIR_DEBUG("Unlinking %s", path);
+    if (unlink(path) < 0 && errno != ENOENT) {
+        virReportSystemError(errno,
+                             _("Unable to remove device %s"), path);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+static int
+lxcDomainAttachDeviceUnlink(virDomainObjPtr vm,
+                            char *file)
+{
+    virLXCDomainObjPrivatePtr priv = vm->privateData;
+
+    if (virProcessRunInMountNamespace(priv->initpid,
+                                      lxcDomainAttachDeviceUnlinkHelper,
+                                      file) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+
 static int
 lxcDomainAttachDeviceDiskLive(virLXCDriverPtr driver,
                               virDomainObjPtr vm,
@@ -3633,15 +4008,19 @@ lxcDomainAttachDeviceDiskLive(virLXCDriverPtr driver,
     virLXCDomainObjPrivatePtr priv = vm->privateData;
     virDomainDiskDefPtr def = dev->data.disk;
     int ret = -1;
-    char *dst = NULL;
     struct stat sb;
-    bool created = false;
-    mode_t mode = 0;
-    char *tmpsrc = def->src;
+    char *file = NULL;
+    int perms;
 
     if (!priv->initpid) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("Cannot attach disk until init PID is known"));
+        goto cleanup;
+    }
+
+    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("devices cgroup isn't mounted"));
         goto cleanup;
     }
 
@@ -3668,53 +4047,12 @@ lxcDomainAttachDeviceDiskLive(virLXCDriverPtr driver,
         goto cleanup;
     }
 
-    if (!S_ISCHR(sb.st_mode) && !S_ISBLK(sb.st_mode)) {
+    if (!S_ISBLK(sb.st_mode)) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
-                       _("Disk source %s must be a character/block device"),
+                       _("Disk source %s must be a block device"),
                        def->src);
         goto cleanup;
     }
-
-    if (virAsprintf(&dst, "/proc/%llu/root/dev/%s",
-                    (unsigned long long)priv->initpid, def->dst) < 0)
-        goto cleanup;
-
-    if (VIR_REALLOC_N(vm->def->disks, vm->def->ndisks+1) < 0)
-        goto cleanup;
-
-    mode = 0700;
-    if (S_ISCHR(sb.st_mode))
-        mode |= S_IFCHR;
-    else
-        mode |= S_IFBLK;
-
-    /* Yes, the device name we're creating may not
-     * actually correspond to the major:minor number
-     * we're using, but we've no other option at this
-     * time. Just have to hope that containerized apps
-     * don't get upset that the major:minor is different
-     * to that normally implied by the device name
-     */
-    VIR_DEBUG("Creating dev %s (%d,%d) from %s",
-              dst, major(sb.st_rdev), minor(sb.st_rdev), def->src);
-    if (mknod(dst, mode, sb.st_rdev) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create device %s"),
-                             dst);
-        goto cleanup;
-    }
-
-    if (lxcContainerChown(vm->def, dst) < 0)
-        goto cleanup;
-
-    created = true;
-
-    /* Labelling normally operates on src, but we need
-     * to actually label the dst here, so hack the config */
-    def->src = dst;
-    if (virSecurityManagerSetImageLabel(driver->securityManager,
-                                        vm->def, def) < 0)
-        goto cleanup;
 
     if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
@@ -3722,14 +4060,38 @@ lxcDomainAttachDeviceDiskLive(virLXCDriverPtr driver,
         goto cleanup;
     }
 
-    if (virCgroupAllowDevicePath(priv->cgroup, def->src,
-                                 (def->readonly ?
-                                  VIR_CGROUP_DEVICE_READ :
-                                  VIR_CGROUP_DEVICE_RW) |
-                                 VIR_CGROUP_DEVICE_MKNOD) != 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("cannot allow device %s for domain %s"),
-                       def->src, vm->def->name);
+    perms = (def->readonly ?
+             VIR_CGROUP_DEVICE_READ :
+             VIR_CGROUP_DEVICE_RW) |
+        VIR_CGROUP_DEVICE_MKNOD;
+
+    if (virCgroupAllowDevice(priv->cgroup,
+                             'b',
+                             major(sb.st_rdev),
+                             minor(sb.st_rdev),
+                             perms) < 0)
+        goto cleanup;
+
+    if (VIR_REALLOC_N(vm->def->disks, vm->def->ndisks + 1) < 0)
+        goto cleanup;
+
+    if (virAsprintf(&file,
+                    "/dev/%s", def->dst) < 0)
+        goto cleanup;
+
+    if (lxcDomainAttachDeviceMknod(driver,
+                                   0700 | S_IFBLK,
+                                   sb.st_rdev,
+                                   vm,
+                                   dev,
+                                   file) < 0) {
+        if (virCgroupDenyDevice(priv->cgroup,
+                                'b',
+                                major(sb.st_rdev),
+                                minor(sb.st_rdev),
+                                perms) < 0)
+            VIR_WARN("cannot deny device %s for domain %s",
+                     def->src, vm->def->name);
         goto cleanup;
     }
 
@@ -3738,11 +4100,8 @@ lxcDomainAttachDeviceDiskLive(virLXCDriverPtr driver,
     ret = 0;
 
 cleanup:
-    def->src = tmpsrc;
     virDomainAuditDisk(vm, NULL, def->src, "attach", ret == 0);
-    if (dst && created && ret < 0)
-        unlink(dst);
-    VIR_FREE(dst);
+    VIR_FREE(file);
     return ret;
 }
 
@@ -3772,7 +4131,7 @@ lxcDomainAttachDeviceNetLive(virConnectPtr conn,
      * network's pool of devices, or resolve bridge device name
      * to the one defined in the network definition.
      */
-    if (networkAllocateActualDevice(net) < 0)
+    if (networkAllocateActualDevice(vm->def, net) < 0)
         return -1;
 
     actualType = virDomainNetGetActualType(net);
@@ -3884,13 +4243,8 @@ lxcDomainAttachDeviceHostdevSubsysUSBLive(virLXCDriverPtr driver,
     virLXCDomainObjPrivatePtr priv = vm->privateData;
     virDomainHostdevDefPtr def = dev->data.hostdev;
     int ret = -1;
-    char *vroot = NULL;
     char *src = NULL;
-    char *dstdir = NULL;
-    char *dstfile = NULL;
     struct stat sb;
-    mode_t mode;
-    bool created = false;
     virUSBDevicePtr usb = NULL;
 
     if (virDomainHostdevFind(vm->def, def, NULL) >= 0) {
@@ -3899,33 +4253,13 @@ lxcDomainAttachDeviceHostdevSubsysUSBLive(virLXCDriverPtr driver,
         return -1;
     }
 
-    if (virAsprintf(&vroot, "/proc/%llu/root",
-                    (unsigned long long)priv->initpid) < 0)
-        goto cleanup;
-
-    if (virAsprintf(&dstdir, "%s/dev/bus/%03d",
-                    vroot,
-                    def->source.subsys.u.usb.bus) < 0)
-        goto cleanup;
-
-    if (virAsprintf(&dstfile, "%s/%03d",
-                    dstdir,
-                    def->source.subsys.u.usb.device) < 0)
-        goto cleanup;
-
     if (virAsprintf(&src, "/dev/bus/usb/%03d/%03d",
                     def->source.subsys.u.usb.bus,
                     def->source.subsys.u.usb.device) < 0)
         goto cleanup;
 
-    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("devices cgroup isn't mounted"));
-        goto cleanup;
-    }
-
     if (!(usb = virUSBDeviceNew(def->source.subsys.u.usb.bus,
-                                def->source.subsys.u.usb.device, vroot)))
+                                def->source.subsys.u.usb.device, NULL)))
         goto cleanup;
 
     if (stat(src, &sb) < 0) {
@@ -3941,48 +4275,36 @@ lxcDomainAttachDeviceHostdevSubsysUSBLive(virLXCDriverPtr driver,
         goto cleanup;
     }
 
-    mode = 0700 | S_IFCHR;
-
-    if (virFileMakePath(dstdir) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create %s"), dstdir);
-        goto cleanup;
-    }
-
-    VIR_DEBUG("Creating dev %s (%d,%d)",
-              dstfile, major(sb.st_rdev), minor(sb.st_rdev));
-    if (mknod(dstfile, mode, sb.st_rdev) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create device %s"),
-                             dstfile);
-        goto cleanup;
-    }
-    created = true;
-
-    if (lxcContainerChown(vm->def, dstfile) < 0)
-        goto cleanup;
-
-    if (virSecurityManagerSetHostdevLabel(driver->securityManager,
-                                          vm->def, def, vroot) < 0)
+    if (VIR_REALLOC_N(vm->def->hostdevs, vm->def->nhostdevs + 1) < 0)
         goto cleanup;
 
     if (virUSBDeviceFileIterate(usb,
                                 virLXCSetupHostUsbDeviceCgroup,
-                                &priv->cgroup) < 0)
+                                priv->cgroup) < 0)
         goto cleanup;
+
+    if (lxcDomainAttachDeviceMknod(driver,
+                                   0700 | S_IFCHR,
+                                   sb.st_rdev,
+                                   vm,
+                                   dev,
+                                   src) < 0) {
+        if (virUSBDeviceFileIterate(usb,
+                                    virLXCTeardownHostUsbDeviceCgroup,
+                                    priv->cgroup) < 0)
+            VIR_WARN("cannot deny device %s for domain %s",
+                     src, vm->def->name);
+        goto cleanup;
+    }
+
+    vm->def->hostdevs[vm->def->nhostdevs++] = def;
 
     ret = 0;
 
 cleanup:
     virDomainAuditHostdev(vm, def, "attach", ret == 0);
-    if (ret < 0 && created)
-        unlink(dstfile);
-
     virUSBDeviceFree(usb);
     VIR_FREE(src);
-    VIR_FREE(dstfile);
-    VIR_FREE(dstdir);
-    VIR_FREE(vroot);
     return ret;
 }
 
@@ -3995,11 +4317,7 @@ lxcDomainAttachDeviceHostdevStorageLive(virLXCDriverPtr driver,
     virLXCDomainObjPrivatePtr priv = vm->privateData;
     virDomainHostdevDefPtr def = dev->data.hostdev;
     int ret = -1;
-    char *dst = NULL;
-    char *vroot = NULL;
     struct stat sb;
-    bool created = false;
-    mode_t mode = 0;
 
     if (!def->source.caps.u.storage.block) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -4027,57 +4345,29 @@ lxcDomainAttachDeviceHostdevStorageLive(virLXCDriverPtr driver,
         goto cleanup;
     }
 
-    if (virAsprintf(&vroot, "/proc/%llu/root",
-                    (unsigned long long)priv->initpid) < 0)
-        goto cleanup;
-
-    if (virAsprintf(&dst, "%s/%s",
-                    vroot,
-                    def->source.caps.u.storage.block) < 0)
-        goto cleanup;
-
     if (VIR_REALLOC_N(vm->def->hostdevs, vm->def->nhostdevs+1) < 0)
         goto cleanup;
 
-    if (lxcContainerSetupHostdevCapsMakePath(dst) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create directory for device %s"),
-                             dst);
-        goto cleanup;
-    }
-
-    mode = 0700 | S_IFBLK;
-
-    VIR_DEBUG("Creating dev %s (%d,%d)",
-              def->source.caps.u.storage.block,
-              major(sb.st_rdev), minor(sb.st_rdev));
-    if (mknod(dst, mode, sb.st_rdev) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create device %s"),
-                             dst);
-        goto cleanup;
-    }
-    created = true;
-
-    if (lxcContainerChown(vm->def, dst) < 0)
+    if (virCgroupAllowDevice(priv->cgroup,
+                             'b',
+                             major(sb.st_rdev),
+                             minor(sb.st_rdev),
+                             VIR_CGROUP_DEVICE_RWM) < 0)
         goto cleanup;
 
-    if (virSecurityManagerSetHostdevLabel(driver->securityManager,
-                                          vm->def, def, vroot) < 0)
-        goto cleanup;
-
-    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("devices cgroup isn't mounted"));
-        goto cleanup;
-    }
-
-    if (virCgroupAllowDevicePath(priv->cgroup, def->source.caps.u.storage.block,
-                                 VIR_CGROUP_DEVICE_RW |
-                                 VIR_CGROUP_DEVICE_MKNOD) != 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("cannot allow device %s for domain %s"),
-                       def->source.caps.u.storage.block, vm->def->name);
+    if (lxcDomainAttachDeviceMknod(driver,
+                                   0700 | S_IFBLK,
+                                   sb.st_rdev,
+                                   vm,
+                                   dev,
+                                   def->source.caps.u.storage.block) < 0) {
+        if (virCgroupDenyDevice(priv->cgroup,
+                                'b',
+                                major(sb.st_rdev),
+                                minor(sb.st_rdev),
+                                VIR_CGROUP_DEVICE_RWM) < 0)
+            VIR_WARN("cannot deny device %s for domain %s",
+                     def->source.caps.u.storage.block, vm->def->name);
         goto cleanup;
     }
 
@@ -4087,10 +4377,6 @@ lxcDomainAttachDeviceHostdevStorageLive(virLXCDriverPtr driver,
 
 cleanup:
     virDomainAuditHostdev(vm, def, "attach", ret == 0);
-    if (dst && created && ret < 0)
-        unlink(dst);
-    VIR_FREE(dst);
-    VIR_FREE(vroot);
     return ret;
 }
 
@@ -4103,11 +4389,7 @@ lxcDomainAttachDeviceHostdevMiscLive(virLXCDriverPtr driver,
     virLXCDomainObjPrivatePtr priv = vm->privateData;
     virDomainHostdevDefPtr def = dev->data.hostdev;
     int ret = -1;
-    char *dst = NULL;
-    char *vroot = NULL;
     struct stat sb;
-    bool created = false;
-    mode_t mode = 0;
 
     if (!def->source.caps.u.misc.chardev) {
         virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
@@ -4135,57 +4417,29 @@ lxcDomainAttachDeviceHostdevMiscLive(virLXCDriverPtr driver,
         goto cleanup;
     }
 
-    if (virAsprintf(&vroot, "/proc/%llu/root",
-                    (unsigned long long)priv->initpid) < 0)
-        goto cleanup;
-
-    if (virAsprintf(&dst, "%s/%s",
-                    vroot,
-                    def->source.caps.u.misc.chardev) < 0)
+    if (virCgroupAllowDevice(priv->cgroup,
+                             'c',
+                             major(sb.st_rdev),
+                             minor(sb.st_rdev),
+                             VIR_CGROUP_DEVICE_RWM) < 0)
         goto cleanup;
 
     if (VIR_REALLOC_N(vm->def->hostdevs, vm->def->nhostdevs+1) < 0)
         goto cleanup;
 
-    if (lxcContainerSetupHostdevCapsMakePath(dst) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create directory for device %s"),
-                             dst);
-        goto cleanup;
-    }
-
-    mode = 0700 | S_IFCHR;
-
-    VIR_DEBUG("Creating dev %s (%d,%d)",
-              def->source.caps.u.misc.chardev,
-              major(sb.st_rdev), minor(sb.st_rdev));
-    if (mknod(dst, mode, sb.st_rdev) < 0) {
-        virReportSystemError(errno,
-                             _("Unable to create device %s"),
-                             dst);
-        goto cleanup;
-    }
-    created = true;
-
-    if (lxcContainerChown(vm->def, dst) < 0)
-        goto cleanup;
-
-    if (virSecurityManagerSetHostdevLabel(driver->securityManager,
-                                          vm->def, def, vroot) < 0)
-        goto cleanup;
-
-    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
-        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("devices cgroup isn't mounted"));
-        goto cleanup;
-    }
-
-    if (virCgroupAllowDevicePath(priv->cgroup, def->source.caps.u.misc.chardev,
-                                 VIR_CGROUP_DEVICE_RW |
-                                 VIR_CGROUP_DEVICE_MKNOD) != 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                       _("cannot allow device %s for domain %s"),
-                       def->source.caps.u.misc.chardev, vm->def->name);
+    if (lxcDomainAttachDeviceMknod(driver,
+                                   0700 | S_IFBLK,
+                                   sb.st_rdev,
+                                   vm,
+                                   dev,
+                                   def->source.caps.u.misc.chardev) < 0) {
+        if (virCgroupDenyDevice(priv->cgroup,
+                                'c',
+                                major(sb.st_rdev),
+                                minor(sb.st_rdev),
+                                VIR_CGROUP_DEVICE_RWM) < 0)
+            VIR_WARN("cannot deny device %s for domain %s",
+                     def->source.caps.u.storage.block, vm->def->name);
         goto cleanup;
     }
 
@@ -4195,10 +4449,6 @@ lxcDomainAttachDeviceHostdevMiscLive(virLXCDriverPtr driver,
 
 cleanup:
     virDomainAuditHostdev(vm, def, "attach", ret == 0);
-    if (dst && created && ret < 0)
-        unlink(dst);
-    VIR_FREE(dst);
-    VIR_FREE(vroot);
     return ret;
 }
 
@@ -4252,6 +4502,12 @@ lxcDomainAttachDeviceHostdevLive(virLXCDriverPtr driver,
     if (!priv->initpid) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("Cannot attach hostdev until init PID is known"));
+        return -1;
+    }
+
+    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("devices cgroup isn't mounted"));
         return -1;
     }
 
@@ -4335,8 +4591,7 @@ lxcDomainDetachDeviceDiskLive(virDomainObjPtr vm,
 
     def = vm->def->disks[idx];
 
-    if (virAsprintf(&dst, "/proc/%llu/root/dev/%s",
-                    (unsigned long long)priv->initpid, def->dst) < 0)
+    if (virAsprintf(&dst, "/dev/%s", def->dst) < 0)
         goto cleanup;
 
     if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
@@ -4345,11 +4600,8 @@ lxcDomainDetachDeviceDiskLive(virDomainObjPtr vm,
         goto cleanup;
     }
 
-    VIR_DEBUG("Unlinking %s (backed by %s)", dst, def->src);
-    if (unlink(dst) < 0 && errno != ENOENT) {
+    if (lxcDomainAttachDeviceUnlink(vm, dst) < 0) {
         virDomainAuditDisk(vm, def->src, NULL, "detach", false);
-        virReportSystemError(errno,
-                             _("Unable to remove device %s"), dst);
         goto cleanup;
     }
     virDomainAuditDisk(vm, def->src, NULL, "detach", true);
@@ -4427,7 +4679,7 @@ lxcDomainDetachDeviceNetLive(virDomainObjPtr vm,
     ret = 0;
 cleanup:
     if (!ret) {
-        networkReleaseActualDevice(detach);
+        networkReleaseActualDevice(vm->def, detach);
         virDomainNetRemove(vm->def, detachidx);
         virDomainNetDefFree(detach);
     }
@@ -4444,7 +4696,6 @@ lxcDomainDetachDeviceHostdevUSBLive(virLXCDriverPtr driver,
     virDomainHostdevDefPtr def = NULL;
     int idx, ret = -1;
     char *dst = NULL;
-    char *vroot = NULL;
     virUSBDevicePtr usb = NULL;
 
     if ((idx = virDomainHostdevFind(vm->def,
@@ -4455,12 +4706,7 @@ lxcDomainDetachDeviceHostdevUSBLive(virLXCDriverPtr driver,
         goto cleanup;
     }
 
-    if (virAsprintf(&vroot, "/proc/%llu/root",
-                    (unsigned long long)priv->initpid) < 0)
-        goto cleanup;
-
-    if (virAsprintf(&dst, "%s/dev/bus/usb/%03d/%03d",
-                    vroot,
+    if (virAsprintf(&dst, "/dev/bus/usb/%03d/%03d",
                     def->source.subsys.u.usb.bus,
                     def->source.subsys.u.usb.device) < 0)
         goto cleanup;
@@ -4472,21 +4718,18 @@ lxcDomainDetachDeviceHostdevUSBLive(virLXCDriverPtr driver,
     }
 
     if (!(usb = virUSBDeviceNew(def->source.subsys.u.usb.bus,
-                                def->source.subsys.u.usb.device, vroot)))
+                                def->source.subsys.u.usb.device, NULL)))
         goto cleanup;
 
-    VIR_DEBUG("Unlinking %s", dst);
-    if (unlink(dst) < 0 && errno != ENOENT) {
+    if (lxcDomainAttachDeviceUnlink(vm, dst) < 0) {
         virDomainAuditHostdev(vm, def, "detach", false);
-        virReportSystemError(errno,
-                             _("Unable to remove device %s"), dst);
         goto cleanup;
     }
     virDomainAuditHostdev(vm, def, "detach", true);
 
     if (virUSBDeviceFileIterate(usb,
                                 virLXCTeardownHostUsbDeviceCgroup,
-                                &priv->cgroup) < 0)
+                                priv->cgroup) < 0)
         VIR_WARN("cannot deny device %s for domain %s",
                  dst, vm->def->name);
 
@@ -4502,7 +4745,6 @@ lxcDomainDetachDeviceHostdevUSBLive(virLXCDriverPtr driver,
 cleanup:
     virUSBDeviceFree(usb);
     VIR_FREE(dst);
-    VIR_FREE(vroot);
     return ret;
 }
 
@@ -4514,7 +4756,6 @@ lxcDomainDetachDeviceHostdevStorageLive(virDomainObjPtr vm,
     virLXCDomainObjPrivatePtr priv = vm->privateData;
     virDomainHostdevDefPtr def = NULL;
     int idx, ret = -1;
-    char *dst = NULL;
 
     if (!priv->initpid) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
@@ -4531,22 +4772,14 @@ lxcDomainDetachDeviceHostdevStorageLive(virDomainObjPtr vm,
         goto cleanup;
     }
 
-    if (virAsprintf(&dst, "/proc/%llu/root/%s",
-                    (unsigned long long)priv->initpid,
-                    def->source.caps.u.storage.block) < 0)
-        goto cleanup;
-
     if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("devices cgroup isn't mounted"));
         goto cleanup;
     }
 
-    VIR_DEBUG("Unlinking %s", dst);
-    if (unlink(dst) < 0 && errno != ENOENT) {
+    if (lxcDomainAttachDeviceUnlink(vm, def->source.caps.u.storage.block) < 0) {
         virDomainAuditHostdev(vm, def, "detach", false);
-        virReportSystemError(errno,
-                             _("Unable to remove device %s"), dst);
         goto cleanup;
     }
     virDomainAuditHostdev(vm, def, "detach", true);
@@ -4561,7 +4794,6 @@ lxcDomainDetachDeviceHostdevStorageLive(virDomainObjPtr vm,
     ret = 0;
 
 cleanup:
-    VIR_FREE(dst);
     return ret;
 }
 
@@ -4573,7 +4805,6 @@ lxcDomainDetachDeviceHostdevMiscLive(virDomainObjPtr vm,
     virLXCDomainObjPrivatePtr priv = vm->privateData;
     virDomainHostdevDefPtr def = NULL;
     int idx, ret = -1;
-    char *dst = NULL;
 
     if (!priv->initpid) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
@@ -4590,22 +4821,14 @@ lxcDomainDetachDeviceHostdevMiscLive(virDomainObjPtr vm,
         goto cleanup;
     }
 
-    if (virAsprintf(&dst, "/proc/%llu/root/%s",
-                    (unsigned long long)priv->initpid,
-                    def->source.caps.u.misc.chardev) < 0)
-        goto cleanup;
-
     if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_DEVICES)) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("devices cgroup isn't mounted"));
         goto cleanup;
     }
 
-    VIR_DEBUG("Unlinking %s", dst);
-    if (unlink(dst) < 0 && errno != ENOENT) {
+    if (lxcDomainAttachDeviceUnlink(vm, def->source.caps.u.misc.chardev) < 0) {
         virDomainAuditHostdev(vm, def, "detach", false);
-        virReportSystemError(errno,
-                             _("Unable to remove device %s"), dst);
         goto cleanup;
     }
     virDomainAuditHostdev(vm, def, "detach", true);
@@ -4620,7 +4843,6 @@ lxcDomainDetachDeviceHostdevMiscLive(virDomainObjPtr vm,
     ret = 0;
 
 cleanup:
-    VIR_FREE(dst);
     return ret;
 }
 
@@ -5167,6 +5389,64 @@ lxcNodeGetInfo(virConnectPtr conn,
 
 
 static int
+lxcDomainMemoryStats(virDomainPtr dom,
+                     struct _virDomainMemoryStat *stats,
+                     unsigned int nr_stats,
+                     unsigned int flags)
+{
+    virDomainObjPtr vm;
+    int ret = -1;
+    virLXCDomainObjPrivatePtr priv;
+    unsigned long long swap_usage;
+    unsigned long mem_usage;
+
+    virCheckFlags(0, -1);
+
+    if (!(vm = lxcDomObjFromDomain(dom)))
+        goto cleanup;
+
+    priv = vm->privateData;
+
+    if (virDomainMemoryStatsEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (!virDomainObjIsActive(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("domain is not active"));
+        goto cleanup;
+    }
+
+    if (virCgroupGetMemSwapUsage(priv->cgroup, &swap_usage) < 0)
+        goto cleanup;
+
+    if (virCgroupGetMemoryUsage(priv->cgroup, &mem_usage) < 0)
+        goto cleanup;
+
+    ret = 0;
+    if (ret < nr_stats) {
+        stats[ret].tag = VIR_DOMAIN_MEMORY_STAT_ACTUAL_BALLOON;
+        stats[ret].val = vm->def->mem.cur_balloon;
+        ret++;
+    }
+    if (ret < nr_stats) {
+        stats[ret].tag = VIR_DOMAIN_MEMORY_STAT_SWAP_IN;
+        stats[ret].val = swap_usage;
+        ret++;
+    }
+    if (ret < nr_stats) {
+        stats[ret].tag = VIR_DOMAIN_MEMORY_STAT_RSS;
+        stats[ret].val = mem_usage;
+        ret++;
+    }
+
+cleanup:
+    if (vm)
+        virObjectUnlock(vm);
+    return ret;
+}
+
+
+static int
 lxcNodeGetCPUStats(virConnectPtr conn,
                    int cpuNum,
                    virNodeCPUStatsPtr params,
@@ -5337,6 +5617,53 @@ cleanup:
 }
 
 
+static int
+lxcDomainGetCPUStats(virDomainPtr dom,
+                     virTypedParameterPtr params,
+                     unsigned int nparams,
+                     int start_cpu,
+                     unsigned int ncpus,
+                     unsigned int flags)
+{
+    virDomainObjPtr vm = NULL;
+    int ret = -1;
+    virLXCDomainObjPrivatePtr priv;
+
+    virCheckFlags(VIR_TYPED_PARAM_STRING_OKAY, -1);
+
+    if (!(vm = lxcDomObjFromDomain(dom)))
+        return ret;
+
+    priv = vm->privateData;
+
+    if (virDomainGetCPUStatsEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (!virDomainObjIsActive(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("domain is not running"));
+        goto cleanup;
+    }
+
+    if (!virCgroupHasController(priv->cgroup, VIR_CGROUP_CONTROLLER_CPUACCT)) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                       "%s", _("cgroup CPUACCT controller is not mounted"));
+        goto cleanup;
+    }
+
+    if (start_cpu == -1)
+        ret = virCgroupGetDomainTotalCpuStats(priv->cgroup,
+                                              params, nparams);
+    else
+        ret = virCgroupGetPercpuStats(priv->cgroup, params,
+                                      nparams, start_cpu, ncpus);
+cleanup:
+    if (vm)
+        virObjectUnlock(vm);
+    return ret;
+}
+
+
 /* Function Tables */
 static virDriver lxcDriver = {
     .no = VIR_DRV_LXC,
@@ -5374,6 +5701,7 @@ static virDriver lxcDriver = {
     .domainGetSecurityLabel = lxcDomainGetSecurityLabel, /* 0.9.10 */
     .nodeGetSecurityModel = lxcNodeGetSecurityModel, /* 0.9.10 */
     .domainGetXMLDesc = lxcDomainGetXMLDesc, /* 0.4.2 */
+    .connectDomainXMLFromNative = lxcConnectDomainXMLFromNative, /* 1.2.2 */
     .connectListDefinedDomains = lxcConnectListDefinedDomains, /* 0.4.2 */
     .connectNumOfDefinedDomains = lxcConnectNumOfDefinedDomains, /* 0.4.2 */
     .domainCreate = lxcDomainCreate, /* 0.4.4 */
@@ -5394,7 +5722,10 @@ static virDriver lxcDriver = {
     .domainGetSchedulerParametersFlags = lxcDomainGetSchedulerParametersFlags, /* 0.9.2 */
     .domainSetSchedulerParameters = lxcDomainSetSchedulerParameters, /* 0.5.0 */
     .domainSetSchedulerParametersFlags = lxcDomainSetSchedulerParametersFlags, /* 0.9.2 */
+    .domainBlockStats = lxcDomainBlockStats, /* 1.2.2 */
+    .domainBlockStatsFlags = lxcDomainBlockStatsFlags, /* 1.2.2 */
     .domainInterfaceStats = lxcDomainInterfaceStats, /* 0.7.3 */
+    .domainMemoryStats = lxcDomainMemoryStats, /* 1.2.2 */
     .nodeGetCPUStats = lxcNodeGetCPUStats, /* 0.9.3 */
     .nodeGetMemoryStats = lxcNodeGetMemoryStats, /* 0.9.3 */
     .nodeGetCellsFreeMemory = lxcNodeGetCellsFreeMemory, /* 0.6.5 */
@@ -5414,6 +5745,7 @@ static virDriver lxcDriver = {
     .nodeSuspendForDuration = lxcNodeSuspendForDuration, /* 0.9.8 */
     .domainSetMetadata = lxcDomainSetMetadata, /* 1.1.3 */
     .domainGetMetadata = lxcDomainGetMetadata, /* 1.1.3 */
+    .domainGetCPUStats = lxcDomainGetCPUStats, /* 1.2.2 */
     .nodeGetMemoryParameters = lxcNodeGetMemoryParameters, /* 0.10.2 */
     .nodeSetMemoryParameters = lxcNodeSetMemoryParameters, /* 0.10.2 */
     .domainSendProcessSignal = lxcDomainSendProcessSignal, /* 1.0.1 */
