@@ -1,7 +1,7 @@
 /*
- * storage_encryption_conf.c: volume encryption information
+ * virstorageencryption.c: volume encryption information
  *
- * Copyright (C) 2009-2011 Red Hat, Inc.
+ * Copyright (C) 2009-2014 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -29,8 +29,7 @@
 
 #include "virbuffer.h"
 #include "viralloc.h"
-#include "storage_conf.h"
-#include "storage_encryption_conf.h"
+#include "virstorageencryption.h"
 #include "virxml.h"
 #include "virerror.h"
 #include "viruuid.h"
@@ -117,7 +116,7 @@ virStorageEncryptionSecretParse(xmlXPathContextPtr ctxt,
     ctxt->node = old_node;
     return ret;
 
-  cleanup:
+ cleanup:
     virStorageEncryptionSecretFree(ret);
     VIR_FREE(uuidstr);
     ctxt->node = old_node;
@@ -169,7 +168,7 @@ virStorageEncryptionParseXML(xmlXPathContextPtr ctxt)
 
     return ret;
 
-  cleanup:
+ cleanup:
     VIR_FREE(nodes);
     virStorageEncryptionFree(ret);
     return NULL;
@@ -197,7 +196,7 @@ virStorageEncryptionParseNode(xmlDocPtr xml, xmlNodePtr root)
     ctxt->node = root;
     enc = virStorageEncryptionParseXML(ctxt);
 
-  cleanup:
+ cleanup:
     xmlXPathFreeContext(ctxt);
     return enc;
 }
@@ -218,7 +217,7 @@ virStorageEncryptionSecretFormat(virBufferPtr buf,
     }
 
     virUUIDFormat(secret->uuid, uuidstr);
-    virBufferAsprintf(buf, "  <secret type='%s' uuid='%s'/>\n",
+    virBufferAsprintf(buf, "<secret type='%s' uuid='%s'/>\n",
                       type, uuidstr);
     return 0;
 }
@@ -237,12 +236,14 @@ virStorageEncryptionFormat(virBufferPtr buf,
         return -1;
     }
     virBufferAsprintf(buf, "<encryption format='%s'>\n", format);
+    virBufferAdjustIndent(buf, 2);
 
     for (i = 0; i < enc->nsecrets; i++) {
         if (virStorageEncryptionSecretFormat(buf, enc->secrets[i]) < 0)
             return -1;
     }
 
+    virBufferAdjustIndent(buf, -2);
     virBufferAddLit(buf, "</encryption>\n");
 
     return 0;

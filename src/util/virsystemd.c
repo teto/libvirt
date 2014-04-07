@@ -35,6 +35,7 @@
 
 #define VIR_FROM_THIS VIR_FROM_SYSTEMD
 
+VIR_LOG_INIT("util.systemd");
 
 static void virSystemdEscapeName(virBufferPtr buf,
                                  const char *name)
@@ -136,7 +137,7 @@ char *virSystemdMakeMachineName(const char *name,
             goto cleanup;
     }
 
-cleanup:
+ cleanup:
     VIR_FREE(username);
 
     return machinename;
@@ -235,6 +236,7 @@ int virSystemdCreateMachine(const char *name,
     VIR_DEBUG("Attempting to create machine via systemd");
     if (virDBusCallMethod(conn,
                           NULL,
+                          NULL,
                           "org.freedesktop.machine1",
                           "/org/freedesktop/machine1",
                           "org.freedesktop.machine1.Manager",
@@ -258,7 +260,7 @@ int virSystemdCreateMachine(const char *name,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(creatorname);
     VIR_FREE(machinename);
     VIR_FREE(slicename);
@@ -300,6 +302,7 @@ int virSystemdTerminateMachine(const char *name,
     VIR_DEBUG("Attempting to terminate machine via systemd");
     if (virDBusCallMethod(conn,
                           NULL,
+                          NULL,
                           "org.freedesktop.machine1",
                           "/org/freedesktop/machine1",
                           "org.freedesktop.machine1.Manager",
@@ -310,7 +313,7 @@ int virSystemdTerminateMachine(const char *name,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(machinename);
     return ret;
 }

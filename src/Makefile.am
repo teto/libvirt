@@ -16,6 +16,10 @@
 ## License along with this library.  If not, see
 ## <http://www.gnu.org/licenses/>.
 
+# old automake does not provide abs_{src,build}dir variables
+abs_builddir = $(shell pwd)
+abs_srcdir = $(shell cd $(srcdir) && pwd)
+
 # No libraries with the exception of LIBXML should be listed
 # here. List them against the individual XXX_la_CFLAGS targets
 # that actually use them. Also keep GETTEXT_CPPFLAGS at the end.
@@ -91,8 +95,9 @@ UTIL_SOURCES =							\
 		util/virbuffer.c util/virbuffer.h		\
 		util/vircgroup.c util/vircgroup.h util/vircgrouppriv.h	\
 		util/virclosecallbacks.c util/virclosecallbacks.h		\
-		util/vircommand.c util/vircommand.h		\
+		util/vircommand.c util/vircommand.h util/vircommandpriv.h \
 		util/virconf.c util/virconf.h			\
+		util/vircrypto.c util/vircrypto.h		\
 		util/virdbus.c util/virdbus.h util/virdbuspriv.h	\
 		util/virdnsmasq.c util/virdnsmasq.h		\
 		util/virebtables.c util/virebtables.h		\
@@ -108,6 +113,7 @@ UTIL_SOURCES =							\
 		util/viridentity.c util/viridentity.h		\
 		util/virinitctl.c util/virinitctl.h		\
 		util/viriptables.c util/viriptables.h		\
+		util/viriscsi.c util/viriscsi.h			\
 		util/virjson.c util/virjson.h			\
 		util/virkeycode.c util/virkeycode.h		\
 		util/virkeyfile.c util/virkeyfile.h		\
@@ -132,12 +138,15 @@ UTIL_SOURCES =							\
 		util/virpci.c util/virpci.h			\
 		util/virpidfile.c util/virpidfile.h		\
 		util/virportallocator.c util/virportallocator.h \
+		util/virprobe.h					\
 		util/virprocess.c util/virprocess.h		\
 		util/virrandom.h util/virrandom.c		\
 		util/virscsi.c util/virscsi.h			\
+		util/virseclabel.c util/virseclabel.h		\
 		util/virsexpr.c util/virsexpr.h			\
 		util/virsocketaddr.h util/virsocketaddr.c	\
 		util/virstatslinux.c util/virstatslinux.h	\
+		util/virstorageencryption.c util/virstorageencryption.h \
 		util/virstoragefile.c util/virstoragefile.h	\
 		util/virstring.h util/virstring.c		\
 		util/virsysinfo.c util/virsysinfo.h		\
@@ -280,9 +289,6 @@ SECRET_CONF_SOURCES =                                          \
 NODE_DEVICE_CONF_SOURCES =                                     \
 		conf/node_device_conf.c conf/node_device_conf.h
 
-ENCRYPTION_CONF_SOURCES =					\
-		conf/storage_encryption_conf.c conf/storage_encryption_conf.h
-
 CPU_CONF_SOURCES =						\
 		conf/cpu_conf.c conf/cpu_conf.h
 
@@ -304,7 +310,6 @@ CONF_SOURCES =							\
 		$(NWFILTER_CONF_SOURCES)			\
 		$(NODE_DEVICE_CONF_SOURCES)			\
 		$(STORAGE_CONF_SOURCES)				\
-		$(ENCRYPTION_CONF_SOURCES)			\
 		$(INTERFACE_CONF_SOURCES)			\
 		$(SECRET_CONF_SOURCES)				\
 		$(CPU_CONF_SOURCES)				\
@@ -687,9 +692,7 @@ QEMU_DRIVER_SOURCES =							\
 		qemu/qemu_monitor_text.h				\
 		qemu/qemu_monitor_json.c				\
 		qemu/qemu_monitor_json.h				\
-		qemu/qemu_driver.c qemu/qemu_driver.h			\
-		qemu/qemu_bridge_filter.c				\
-		qemu/qemu_bridge_filter.h
+		qemu/qemu_driver.c qemu/qemu_driver.h
 
 XENAPI_DRIVER_SOURCES =						\
 		xenapi/xenapi_driver.c xenapi/xenapi_driver.h	\
@@ -775,6 +778,8 @@ PARALLELS_DRIVER_SOURCES =					\
 		parallels/parallels_network.c
 
 BHYVE_DRIVER_SOURCES =						\
+		bhyve/bhyve_capabilities.c			\
+		bhyve/bhyve_capabilities.h			\
 		bhyve/bhyve_command.c				\
 		bhyve/bhyve_command.h				\
 		bhyve/bhyve_driver.h				\
@@ -977,6 +982,10 @@ libvirt_la_BUILT_LIBADD += libvirt_cpu.la
 libvirt_cpu_la_CFLAGS = \
 		-I$(top_srcdir)/src/conf $(AM_CFLAGS)
 libvirt_cpu_la_SOURCES = $(CPU_SOURCES)
+libvirt_cpu_la_DEPENDENCIES = $(abs_builddir)/cpu/cpu_map.xml
+
+$(abs_builddir)/cpu/cpu_map.xml:
+	$(AM_V_GEN)ln -s $(abs_srcdir)/cpu/cpu_map.xml $@
 
 if WITH_VMX
 noinst_LTLIBRARIES += libvirt_vmx.la
@@ -1757,7 +1766,9 @@ if WITH_QEMU
 test_libvirt_lockd.aug: locking/test_libvirt_lockd.aug.in \
 		locking/qemu-lockd.conf $(AUG_GENTEST)
 	$(AM_V_GEN)$(AUG_GENTEST) locking/qemu-lockd.conf $< $@
-endif WITH_QEMU
+else ! WITH_QEMU
+test_libvirt_lockd.aug:
+endif ! WITH_QEMU
 
 test_virtlockd.aug: locking/test_virtlockd.aug.in \
 		locking/virtlockd.conf $(AUG_GENTEST)
@@ -2060,7 +2071,6 @@ libvirt_setuid_rpc_client_la_SOURCES = 		\
 		util/virprocess.c		\
 		util/virrandom.c		\
 		util/virsocketaddr.c		\
-		util/virstoragefile.c		\
 		util/virstring.c		\
 		util/virtime.c			\
 		util/virthread.c		\
@@ -2122,12 +2132,12 @@ lockd_la_LIBADD = ../gnulib/lib/libgnu.la \
 	libvirt-net-rpc-client.la \
 	$(NULL)
 augeas_DATA += locking/libvirt_lockd.aug
-augeastest_DATA += test_libvirt_lockd.aug
-CLEANFILES += test_libvirt_lockd.aug
 if WITH_DTRACE_PROBES
 lockd_la_LIBADD += libvirt_probes.lo
 endif WITH_DTRACE_PROBES
 if WITH_QEMU
+augeastest_DATA += test_libvirt_lockd.aug
+CLEANFILES += test_libvirt_lockd.aug
 nodist_conf_DATA += locking/qemu-lockd.conf
 BUILT_SOURCES += locking/qemu-lockd.conf
 DISTCLEANFILES += locking/qemu-lockd.conf

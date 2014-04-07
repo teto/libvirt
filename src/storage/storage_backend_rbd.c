@@ -1,7 +1,7 @@
 /*
  * storage_backend_rbd.c: storage backend for RBD (RADOS Block Device) handling
  *
- * Copyright (C) 2013 Red Hat, Inc.
+ * Copyright (C) 2013-2014 Red Hat, Inc.
  * Copyright (C) 2012 Wido den Hollander
  *
  * This library is free software; you can redistribute it and/or
@@ -36,6 +36,8 @@
 #include "rbd/librbd.h"
 
 #define VIR_FROM_THIS VIR_FROM_STORAGE
+
+VIR_LOG_INIT("storage.storage_backend_rbd");
 
 struct _virStorageBackendRBDState {
     rados_t cluster;
@@ -224,7 +226,7 @@ static int virStorageBackendRBDOpenRADOSConn(virStorageBackendRBDStatePtr ptr,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(secret_value);
     VIR_FREE(rados_key);
 
@@ -298,8 +300,8 @@ static int volStorageBackendRBDRefreshVolInfo(virStorageVolDefPtr vol,
               (unsigned long long)info.obj_size,
               (unsigned long long)info.num_objs);
 
-    vol->capacity = info.size;
-    vol->allocation = info.obj_size * info.num_objs;
+    vol->target.capacity = info.size;
+    vol->target.allocation = info.obj_size * info.num_objs;
     vol->type = VIR_STORAGE_VOL_NETWORK;
 
     VIR_FREE(vol->target.path);
@@ -316,7 +318,7 @@ static int volStorageBackendRBDRefreshVolInfo(virStorageVolDefPtr vol,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     rbd_close(image);
     return ret;
 }
@@ -382,11 +384,6 @@ static int virStorageBackendRBDRefreshPool(virConnectPtr conn,
     for (name = names; name < names + max_size;) {
         virStorageVolDefPtr vol;
 
-        if (VIR_REALLOC_N(pool->volumes.objs, pool->volumes.count + 1) < 0) {
-            virStoragePoolObjClearVols(pool);
-            goto cleanup;
-        }
-
         if (STREQ(name, ""))
             break;
 
@@ -405,7 +402,11 @@ static int virStorageBackendRBDRefreshPool(virConnectPtr conn,
             goto cleanup;
         }
 
-        pool->volumes.objs[pool->volumes.count++] = vol;
+        if (VIR_APPEND_ELEMENT(pool->volumes.objs, pool->volumes.count, vol) < 0) {
+            virStorageVolDefFree(vol);
+            virStoragePoolObjClearVols(pool);
+            goto cleanup;
+        }
     }
 
     VIR_DEBUG("Found %zu images in RBD pool %s",
@@ -413,7 +414,7 @@ static int virStorageBackendRBDRefreshPool(virConnectPtr conn,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(names);
     virStorageBackendRBDCloseRADOSConn(&ptr);
     return ret;
@@ -453,7 +454,7 @@ static int virStorageBackendRBDDeleteVol(virConnectPtr conn,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     virStorageBackendRBDCloseRADOSConn(&ptr);
     return ret;
 }
@@ -515,7 +516,7 @@ virStorageBackendRBDBuildVol(virConnectPtr conn,
 
     VIR_DEBUG("Creating RBD image %s/%s with size %llu",
               pool->def->source.name,
-              vol->name, vol->capacity);
+              vol->name, vol->target.capacity);
 
     virCheckFlags(0, -1);
 
@@ -531,7 +532,8 @@ virStorageBackendRBDBuildVol(virConnectPtr conn,
         goto cleanup;
     }
 
-    r = virStorageBackendRBDCreateImage(ptr.ioctx, vol->name, vol->capacity);
+    r = virStorageBackendRBDCreateImage(ptr.ioctx, vol->name,
+                                        vol->target.capacity);
     if (r < 0) {
         virReportSystemError(-r, _("failed to create volume '%s/%s'"),
                              pool->def->source.name,
@@ -544,7 +546,7 @@ virStorageBackendRBDBuildVol(virConnectPtr conn,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     virStorageBackendRBDCloseRADOSConn(&ptr);
     return ret;
 }
@@ -572,7 +574,7 @@ static int virStorageBackendRBDRefreshVol(virConnectPtr conn,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     virStorageBackendRBDCloseRADOSConn(&ptr);
     return ret;
 }
@@ -616,7 +618,7 @@ static int virStorageBackendRBDResizeVol(virConnectPtr conn ATTRIBUTE_UNUSED,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     if (image != NULL)
        rbd_close(image);
     virStorageBackendRBDCloseRADOSConn(&ptr);

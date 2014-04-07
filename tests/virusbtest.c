@@ -127,7 +127,7 @@ static int testDeviceFind(const void *opaque)
 
     ret = 0;
 
-cleanup:
+ cleanup:
     virObjectUnref(devs);
     virUSBDeviceFree(dev);
     return ret;
@@ -137,7 +137,8 @@ cleanup:
 static int
 testCheckNdevs(const char* occasion,
                size_t got,
-               size_t expected) {
+               size_t expected)
+{
     if (got != expected) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                        "%s: got %zu devices, expected %zu",
@@ -225,7 +226,7 @@ testUSBList(const void *opaque ATTRIBUTE_UNUSED)
 
     ret = 0;
 
-cleanup:
+ cleanup:
     virObjectUnref(list);
     virObjectUnref(devlist);
     virUSBDeviceFree(dev);

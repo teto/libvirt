@@ -1,7 +1,7 @@
 /*
  * virfile.h: safer file handling
  *
- * Copyright (C) 2010-2011, 2013 Red Hat, Inc.
+ * Copyright (C) 2010-2014 Red Hat, Inc.
  * Copyright (C) 2010 IBM Corporation
  * Copyright (C) 2010 Stefan Berger
  * Copyright (C) 2010 Eric Blake
@@ -97,7 +97,7 @@ int virFileWrapperFdClose(virFileWrapperFdPtr dfd);
 
 void virFileWrapperFdFree(virFileWrapperFdPtr dfd);
 
-int virFileLock(int fd, bool shared, off_t start, off_t len);
+int virFileLock(int fd, bool shared, off_t start, off_t len, bool waitForLock);
 int virFileUnlock(int fd, off_t start, off_t len);
 
 typedef int (*virFileRewriteFunc)(int fd, void *opaque);
@@ -159,6 +159,17 @@ bool virFileIsDir (const char *file) ATTRIBUTE_NONNULL(1);
 bool virFileExists(const char *file) ATTRIBUTE_NONNULL(1);
 bool virFileIsExecutable(const char *file) ATTRIBUTE_NONNULL(1);
 
+enum {
+    VIR_FILE_SHFS_NFS = (1 << 0),
+    VIR_FILE_SHFS_GFS2 = (1 << 1),
+    VIR_FILE_SHFS_OCFS = (1 << 2),
+    VIR_FILE_SHFS_AFS = (1 << 3),
+    VIR_FILE_SHFS_SMB = (1 << 4),
+    VIR_FILE_SHFS_CIFS = (1 << 5),
+};
+
+int virFileIsSharedFSType(const char *path, int fstypes) ATTRIBUTE_NONNULL(1);
+int virFileIsSharedFS(const char *path) ATTRIBUTE_NONNULL(1);
 int virFileIsMountPoint(const char *file) ATTRIBUTE_NONNULL(1);
 
 int virFileGetMountSubtree(const char *mtabpath,

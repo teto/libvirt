@@ -102,6 +102,8 @@
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
+VIR_LOG_INIT("libvirt");
+
 /*
  * TODO:
  * - use lock to protect against concurrent accesses ?
@@ -155,7 +157,7 @@ virConnectAuthGainPolkit(const char *privilege)
         goto cleanup;
 
     ret = 0;
-cleanup:
+ cleanup:
     virCommandFree(cmd);
     return ret;
 }
@@ -461,7 +463,7 @@ virGlobalInit(void)
 
     return;
 
-error:
+ error:
     virGlobalError = true;
 }
 
@@ -868,7 +870,7 @@ virGetVersion(unsigned long *libVer, const char *type ATTRIBUTE_UNUSED,
 
     return 0;
 
-error:
+ error:
     virDispatchError(NULL);
     return -1;
 }
@@ -921,7 +923,7 @@ virConnectGetConfigFile(virConfPtr *conf)
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(filename);
     return ret;
 }
@@ -1024,7 +1026,7 @@ virConnectGetDefaultURI(virConfPtr conf,
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     return ret;
 }
 
@@ -1269,7 +1271,7 @@ do_open(const char *name,
 
     return ret;
 
-failed:
+ failed:
     virConfFree(conf);
     virObjectUnref(ret);
 
@@ -1314,7 +1316,7 @@ virConnectOpen(const char *name)
         goto error;
     return ret;
 
-error:
+ error:
     virDispatchError(NULL);
     return NULL;
 }
@@ -1350,7 +1352,7 @@ virConnectOpenReadOnly(const char *name)
         goto error;
     return ret;
 
-error:
+ error:
     virDispatchError(NULL);
     return NULL;
 }
@@ -1390,7 +1392,7 @@ virConnectOpenAuth(const char *name,
         goto error;
     return ret;
 
-error:
+ error:
     virDispatchError(NULL);
     return NULL;
 }
@@ -1560,7 +1562,7 @@ virConnectGetVersion(virConnectPtr conn, unsigned long *hvVer)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -1598,7 +1600,7 @@ virConnectGetLibVersion(virConnectPtr conn, unsigned long *libVer)
     *libVer = LIBVIR_VERSION_NUMBER;
     return 0;
 
-error:
+ error:
     virDispatchError(conn);
     return ret;
 }
@@ -1635,7 +1637,7 @@ virConnectGetHostname(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -1671,7 +1673,7 @@ virConnectGetURI(virConnectPtr conn)
 
     return name;
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -1708,7 +1710,7 @@ virConnectGetSysinfo(virConnectPtr conn, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -1743,7 +1745,7 @@ virConnectGetMaxVcpus(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -1785,7 +1787,7 @@ virConnectListDomains(virConnectPtr conn, int *ids, int maxids)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -1816,7 +1818,7 @@ virConnectNumOfDomains(virConnectPtr conn)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -1896,7 +1898,7 @@ virDomainCreateXML(virConnectPtr conn, const char *xmlDesc,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -1963,7 +1965,7 @@ virDomainCreateXMLWithFiles(virConnectPtr conn, const char *xmlDesc,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -2021,7 +2023,7 @@ virDomainLookupByID(virConnectPtr conn, int id)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -2057,7 +2059,7 @@ virDomainLookupByUUID(virConnectPtr conn, const unsigned char *uuid)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -2093,7 +2095,7 @@ virDomainLookupByUUIDString(virConnectPtr conn, const char *uuidstr)
 
     return virDomainLookupByUUID(conn, &uuid[0]);
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -2129,7 +2131,7 @@ virDomainLookupByName(virConnectPtr conn, const char *name)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -2183,7 +2185,7 @@ virDomainDestroy(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2243,7 +2245,7 @@ virDomainDestroyFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2341,7 +2343,7 @@ virDomainSuspend(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -2383,7 +2385,7 @@ virDomainResume(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -2444,7 +2446,7 @@ virDomainPMSuspendForDuration(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2487,7 +2489,7 @@ virDomainPMWakeup(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2546,7 +2548,7 @@ virDomainSave(virDomainPtr domain, const char *to)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -2637,7 +2639,7 @@ virDomainSaveFlags(virDomainPtr domain, const char *to,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -2687,7 +2689,7 @@ virDomainRestore(virConnectPtr conn, const char *from)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2765,7 +2767,7 @@ virDomainRestoreFlags(virConnectPtr conn, const char *from, const char *dxml,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2830,7 +2832,7 @@ virDomainSaveImageGetXMLDesc(virConnectPtr conn, const char *file,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -2906,7 +2908,7 @@ virDomainSaveImageDefineXML(virConnectPtr conn, const char *file,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -2934,6 +2936,8 @@ error:
  * will attempt to bypass the file system cache while creating the file,
  * or fail if it cannot do so for the given system; this can allow less
  * pressure on file system cache, but also risks slowing saves to NFS.
+ *
+ * For more control over the output format, see virDomainCoreDumpWithFormat().
  *
  * Returns 0 in case of success and -1 in case of failure.
  */
@@ -2992,7 +2996,106 @@ virDomainCoreDump(virDomainPtr domain, const char *to, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
+    virDispatchError(domain->conn);
+    return -1;
+}
+
+/**
+ * virDomainCoreDumpWithFormat:
+ * @domain: a domain object
+ * @to: path for the core file
+ * @dumpformat: format of domain memory's dump
+ * @flags: bitwise-OR of virDomainCoreDumpFlags
+ *
+ * This method will dump the core of a domain on a given file for analysis.
+ * Note that for remote Xen Daemon the file path will be interpreted in
+ * the remote host. Hypervisors may require  the user to manually ensure
+ * proper permissions on the file named by @to.
+ *
+ * @dumpformat controls which format the dump will have; use of
+ * VIR_DOMAIN_CORE_DUMP_FORMAT_RAW mirrors what virDomainCoreDump() will
+ * perform.  Not all hypervisors are able to support all formats.
+ *
+ * If @flags includes VIR_DUMP_CRASH, then leave the guest shut off with
+ * a crashed state after the dump completes.  If @flags includes
+ * VIR_DUMP_LIVE, then make the core dump while continuing to allow
+ * the guest to run; otherwise, the guest is suspended during the dump.
+ * VIR_DUMP_RESET flag forces reset of the quest after dump.
+ * The above three flags are mutually exclusive.
+ *
+ * Additionally, if @flags includes VIR_DUMP_BYPASS_CACHE, then libvirt
+ * will attempt to bypass the file system cache while creating the file,
+ * or fail if it cannot do so for the given system; this can allow less
+ * pressure on file system cache, but also risks slowing saves to NFS.
+ *
+ * Returns 0 in case of success and -1 in case of failure.
+ */
+int
+virDomainCoreDumpWithFormat(virDomainPtr domain, const char *to,
+                            unsigned int dumpformat, unsigned int flags)
+{
+    virConnectPtr conn;
+
+    VIR_DOMAIN_DEBUG(domain, "to=%s, dumpformat=%u, flags=%x",
+                     to, dumpformat, flags);
+
+    virResetLastError();
+
+    virCheckDomainReturn(domain, -1);
+    conn = domain->conn;
+
+    virCheckReadOnlyGoto(conn->flags, error);
+    virCheckNonNullArgGoto(to, error);
+
+    if (dumpformat >= VIR_DOMAIN_CORE_DUMP_FORMAT_LAST) {
+        virReportInvalidArg(flags, _("dumpformat '%d' is not supported"),
+                            dumpformat);
+        goto error;
+    }
+
+    if ((flags & VIR_DUMP_CRASH) && (flags & VIR_DUMP_LIVE)) {
+        virReportInvalidArg(flags, "%s",
+                            _("crash and live flags are mutually exclusive"));
+        goto error;
+    }
+
+    if ((flags & VIR_DUMP_CRASH) && (flags & VIR_DUMP_RESET)) {
+        virReportInvalidArg(flags, "%s",
+                            _("crash and reset flags are mutually exclusive"));
+        goto error;
+    }
+
+    if ((flags & VIR_DUMP_LIVE) && (flags & VIR_DUMP_RESET)) {
+        virReportInvalidArg(flags, "%s",
+                            _("live and reset flags are mutually exclusive"));
+        goto error;
+    }
+
+    if (conn->driver->domainCoreDumpWithFormat) {
+        int ret;
+        char *absolute_to;
+
+        /* We must absolutize the file path as the save is done out of process */
+        if (virFileAbsPath(to, &absolute_to) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("could not build absolute core file path"));
+            goto error;
+        }
+
+        ret = conn->driver->domainCoreDumpWithFormat(domain, absolute_to,
+                                                     dumpformat, flags);
+
+        VIR_FREE(absolute_to);
+
+        if (ret < 0)
+            goto error;
+        return ret;
+    }
+
+    virReportUnsupportedError();
+
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3054,7 +3157,7 @@ virDomainScreenshot(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -3104,7 +3207,7 @@ virDomainShutdown(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3164,7 +3267,7 @@ virDomainShutdownFlags(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3222,7 +3325,7 @@ virDomainReboot(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3266,7 +3369,7 @@ virDomainReset(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3317,7 +3420,7 @@ virDomainGetUUID(virDomainPtr domain, unsigned char *uuid)
 
     return 0;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3346,7 +3449,7 @@ virDomainGetUUIDString(virDomainPtr domain, char *buf)
     virUUIDFormat(domain->uuid, buf);
     return 0;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3404,7 +3507,7 @@ virDomainGetOSType(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -3448,7 +3551,7 @@ virDomainGetMaxMemory(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return 0;
 }
@@ -3495,7 +3598,7 @@ virDomainSetMaxMemory(virDomainPtr domain, unsigned long memory)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3541,7 +3644,7 @@ virDomainSetMemory(virDomainPtr domain, unsigned long memory)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3598,7 +3701,7 @@ virDomainSetMemoryFlags(virDomainPtr domain, unsigned long memory,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3654,7 +3757,7 @@ virDomainSetMemoryStatsPeriod(virDomainPtr domain, int period,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3748,7 +3851,7 @@ virDomainSetMemoryParameters(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3831,7 +3934,7 @@ virDomainGetMemoryParameters(virDomainPtr domain,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3883,7 +3986,7 @@ virDomainSetNumaParameters(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -3949,7 +4052,7 @@ virDomainGetNumaParameters(virDomainPtr domain,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -4001,7 +4104,7 @@ virDomainSetBlkioParameters(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -4075,7 +4178,7 @@ virDomainGetBlkioParameters(virDomainPtr domain,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -4119,7 +4222,7 @@ virDomainGetInfo(virDomainPtr domain, virDomainInfoPtr info)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -4165,7 +4268,7 @@ virDomainGetState(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -4206,7 +4309,7 @@ virDomainGetControlInfo(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -4261,7 +4364,7 @@ virDomainGetXMLDesc(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -4311,7 +4414,7 @@ virConnectDomainXMLFromNative(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -4361,7 +4464,7 @@ virConnectDomainXMLToNative(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -4406,7 +4509,8 @@ virDomainMigrateVersion1(virDomainPtr domain,
     if (ret == 0 && info.state == VIR_DOMAIN_PAUSED)
         flags |= VIR_MIGRATE_PAUSED;
 
-    destflags = flags & ~VIR_MIGRATE_ABORT_ON_ERROR;
+    destflags = flags & ~(VIR_MIGRATE_ABORT_ON_ERROR |
+                          VIR_MIGRATE_AUTO_CONVERGE);
 
     /* Prepare the migration.
      *
@@ -4451,7 +4555,7 @@ virDomainMigrateVersion1(virDomainPtr domain,
     else
         ddomain = virDomainLookupByName(dconn, dname);
 
-done:
+ done:
     VIR_FREE(uri_out);
     VIR_FREE(cookie);
     return ddomain;
@@ -4536,7 +4640,8 @@ virDomainMigrateVersion2(virDomainPtr domain,
     if (ret == 0 && info.state == VIR_DOMAIN_PAUSED)
         flags |= VIR_MIGRATE_PAUSED;
 
-    destflags = flags & ~VIR_MIGRATE_ABORT_ON_ERROR;
+    destflags = flags & ~(VIR_MIGRATE_ABORT_ON_ERROR |
+                          VIR_MIGRATE_AUTO_CONVERGE);
 
     VIR_DEBUG("Prepare2 %p flags=%lx", dconn, destflags);
     ret = dconn->driver->domainMigratePrepare2
@@ -4573,7 +4678,7 @@ virDomainMigrateVersion2(virDomainPtr domain,
      */
     cancelled = ret < 0 ? 1 : 0;
 
-finish:
+ finish:
     /* In version 2 of the migration protocol, we pass the
      * status code from the sender to the destination host,
      * so it can do any cleanup if the migration failed.
@@ -4585,7 +4690,7 @@ finish:
     if (cancelled && ddomain)
         VIR_ERROR(_("finish step ignored that migration was cancelled"));
 
-done:
+ done:
     if (orig_err) {
         virSetError(orig_err);
         virFreeError(orig_err);
@@ -4708,7 +4813,8 @@ virDomainMigrateVersion3Full(virDomainPtr domain,
     if (ret == 0 && state == VIR_DOMAIN_PAUSED)
         flags |= VIR_MIGRATE_PAUSED;
 
-    destflags = flags & ~VIR_MIGRATE_ABORT_ON_ERROR;
+    destflags = flags & ~(VIR_MIGRATE_ABORT_ON_ERROR |
+                          VIR_MIGRATE_AUTO_CONVERGE);
 
     VIR_DEBUG("Prepare3 %p flags=%x", dconn, destflags);
     cookiein = cookieout;
@@ -4806,7 +4912,7 @@ virDomainMigrateVersion3Full(virDomainPtr domain,
      */
     cancelled = ret < 0 ? 1 : 0;
 
-finish:
+ finish:
     /*
      * The status code from the source is passed to the destination.
      * The dest can cleanup if the source indicated it failed to
@@ -4856,7 +4962,7 @@ finish:
     if (!orig_err)
         orig_err = virSaveLastError();
 
-confirm:
+ confirm:
     /*
      * If cancelled, then src VM will be restarted, else it will be killed.
      * Don't do this if migration failed on source and thus it was already
@@ -4888,7 +4994,7 @@ confirm:
         }
     }
 
-done:
+ done:
     if (orig_err) {
         virSetError(orig_err);
         virFreeError(orig_err);
@@ -5310,7 +5416,7 @@ virDomainMigrate(virDomainPtr domain,
 
     return ddomain;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -5543,7 +5649,7 @@ virDomainMigrate2(virDomainPtr domain,
 
     return ddomain;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -5725,13 +5831,13 @@ virDomainMigrate3(virDomainPtr domain,
         goto error;
     }
 
-done:
+ done:
     if (ddomain == NULL)
         goto error;
 
     return ddomain;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -5874,7 +5980,7 @@ virDomainMigrateToURI(virDomainPtr domain,
 
     return 0;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6022,7 +6128,7 @@ virDomainMigrateToURI2(virDomainPtr domain,
 
     return 0;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6167,7 +6273,7 @@ virDomainMigrateToURI3(virDomainPtr domain,
 
     return 0;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6208,7 +6314,7 @@ virDomainMigratePrepare(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return -1;
 }
@@ -6252,7 +6358,7 @@ virDomainMigratePerform(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6291,7 +6397,7 @@ virDomainMigrateFinish(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return NULL;
 }
@@ -6335,7 +6441,7 @@ virDomainMigratePrepare2(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return -1;
 }
@@ -6376,7 +6482,7 @@ virDomainMigrateFinish2(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return NULL;
 }
@@ -6421,7 +6527,7 @@ virDomainMigratePrepareTunnel(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -6467,7 +6573,7 @@ virDomainMigrateBegin3(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -6516,7 +6622,7 @@ virDomainMigratePrepare3(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return -1;
 }
@@ -6569,7 +6675,7 @@ virDomainMigratePrepareTunnel3(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -6622,7 +6728,7 @@ virDomainMigratePerform3(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6668,7 +6774,7 @@ virDomainMigrateFinish3(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return NULL;
 }
@@ -6710,7 +6816,7 @@ virDomainMigrateConfirm3(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6755,7 +6861,7 @@ virDomainMigrateBegin3Params(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -6800,7 +6906,7 @@ virDomainMigratePrepare3Params(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return -1;
 }
@@ -6851,7 +6957,7 @@ virDomainMigratePrepareTunnel3Params(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -6899,7 +7005,7 @@ virDomainMigratePerform3Params(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -6943,7 +7049,7 @@ virDomainMigrateFinish3Params(virConnectPtr dconn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dconn);
     return NULL;
 }
@@ -6988,7 +7094,7 @@ virDomainMigrateConfirm3Params(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -7023,7 +7129,7 @@ virNodeGetInfo(virConnectPtr conn, virNodeInfoPtr info)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -7059,7 +7165,7 @@ virConnectGetCapabilities(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -7150,7 +7256,7 @@ virNodeGetCPUStats(virConnectPtr conn,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -7237,7 +7343,7 @@ virNodeGetMemoryStats(virConnectPtr conn,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -7272,7 +7378,7 @@ virNodeGetFreeMemory(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return 0;
 }
@@ -7324,7 +7430,7 @@ virNodeSuspendForDuration(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -7384,7 +7490,7 @@ virNodeGetMemoryParameters(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -7442,7 +7548,7 @@ virNodeSetMemoryParameters(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -7480,7 +7586,7 @@ virDomainGetSchedulerType(virDomainPtr domain, int *nparams)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -7534,7 +7640,7 @@ virDomainGetSchedulerParameters(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -7615,7 +7721,7 @@ virDomainGetSchedulerParametersFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -7667,7 +7773,7 @@ virDomainSetSchedulerParameters(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -7727,7 +7833,7 @@ virDomainSetSchedulerParametersFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -7793,7 +7899,7 @@ virDomainBlockStats(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -7873,7 +7979,7 @@ virDomainBlockStatsFlags(virDomainPtr dom,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -7935,7 +8041,7 @@ virDomainInterfaceStats(virDomainPtr dom, const char *path,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -7996,7 +8102,7 @@ virDomainSetInterfaceParameters(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -8064,7 +8170,7 @@ virDomainGetInterfaceParameters(virDomainPtr domain,
     }
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -8133,7 +8239,7 @@ virDomainMemoryStats(virDomainPtr dom, virDomainMemoryStatPtr stats,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -8219,7 +8325,7 @@ virDomainBlockPeek(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -8280,7 +8386,7 @@ virDomainBlockResize(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -8386,7 +8492,7 @@ virDomainMemoryPeek(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -8492,7 +8598,7 @@ virDomainGetBlockInfo(virDomainPtr domain, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -8542,7 +8648,7 @@ virDomainDefineXML(virConnectPtr conn, const char *xml)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -8587,7 +8693,7 @@ virDomainUndefine(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -8642,7 +8748,7 @@ virDomainUndefineFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -8675,7 +8781,7 @@ virConnectNumOfDefinedDomains(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -8721,7 +8827,7 @@ virConnectListDefinedDomains(virConnectPtr conn, char **const names,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -8820,7 +8926,7 @@ virConnectListAllDomains(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -8861,7 +8967,7 @@ virDomainCreate(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -8924,7 +9030,7 @@ virDomainCreateWithFlags(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9000,7 +9106,7 @@ virDomainCreateWithFiles(virDomainPtr domain, unsigned int nfiles,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9042,7 +9148,7 @@ virDomainGetAutostart(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9083,7 +9189,7 @@ virDomainSetAutostart(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9121,7 +9227,7 @@ virDomainInjectNMI(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9179,7 +9285,7 @@ virDomainSendKey(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9209,7 +9315,7 @@ error:
  * Not all hypervisors will support sending signals to
  * arbitrary processes or process groups. If this API is
  * implemented the minimum requirement is to be able to
- * use @pid_value==1 (i.e. kill init). No other value is
+ * use @pid_value == 1 (i.e. kill init). No other value is
  * required to be supported.
  *
  * If the @signum is VIR_DOMAIN_PROCESS_SIGNAL_NOP then this
@@ -9249,7 +9355,7 @@ virDomainSendProcessSignal(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9297,7 +9403,7 @@ virDomainSetVcpus(virDomainPtr domain, unsigned int nvcpus)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9379,7 +9485,7 @@ virDomainSetVcpusFlags(virDomainPtr domain, unsigned int nvcpus,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9448,7 +9554,7 @@ virDomainGetVcpusFlags(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9508,7 +9614,7 @@ virDomainPinVcpu(virDomainPtr domain, unsigned int vcpu,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9580,7 +9686,7 @@ virDomainPinVcpuFlags(virDomainPtr domain, unsigned int vcpu,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9655,7 +9761,7 @@ virDomainGetVcpuPinInfo(virDomainPtr domain, int ncpumaps,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9722,7 +9828,7 @@ virDomainPinEmulator(virDomainPtr domain, unsigned char *cpumap,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9786,7 +9892,7 @@ virDomainGetEmulatorPinInfo(virDomainPtr domain, unsigned char *cpumap,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9859,7 +9965,7 @@ virDomainGetVcpus(virDomainPtr domain, virVcpuInfoPtr info, int maxinfo,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9899,7 +10005,7 @@ virDomainGetMaxVcpus(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9940,7 +10046,7 @@ virDomainGetSecurityLabel(virDomainPtr domain, virSecurityLabelPtr seclabel)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -9984,7 +10090,7 @@ virDomainGetSecurityLabelList(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10075,7 +10181,7 @@ virDomainSetMetadata(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10152,7 +10258,7 @@ virDomainGetMetadata(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -10189,7 +10295,7 @@ virNodeGetSecurityModel(virConnectPtr conn, virSecurityModelPtr secmodel)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10234,7 +10340,7 @@ virDomainAttachDevice(virDomainPtr domain, const char *xml)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10290,7 +10396,7 @@ virDomainAttachDeviceFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10331,7 +10437,7 @@ virDomainDetachDevice(virDomainPtr domain, const char *xml)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10403,7 +10509,7 @@ virDomainDetachDeviceFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10459,7 +10565,7 @@ virDomainUpdateDeviceFlags(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -10506,7 +10612,7 @@ virNodeGetCellsFreeMemory(virConnectPtr conn, unsigned long long *freeMems,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10599,7 +10705,7 @@ virConnectListAllNetworks(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10632,7 +10738,7 @@ virConnectNumOfNetworks(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10675,7 +10781,7 @@ virConnectListNetworks(virConnectPtr conn, char **const names, int maxnames)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10708,7 +10814,7 @@ virConnectNumOfDefinedNetworks(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10752,7 +10858,7 @@ virConnectListDefinedNetworks(virConnectPtr conn, char **const names,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -10788,7 +10894,7 @@ virNetworkLookupByName(virConnectPtr conn, const char *name)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -10824,7 +10930,7 @@ virNetworkLookupByUUID(virConnectPtr conn, const unsigned char *uuid)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -10860,7 +10966,7 @@ virNetworkLookupByUUIDString(virConnectPtr conn, const char *uuidstr)
 
     return virNetworkLookupByUUID(conn, &uuid[0]);
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -10897,7 +11003,7 @@ virNetworkCreateXML(virConnectPtr conn, const char *xmlDesc)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -10933,7 +11039,7 @@ virNetworkDefineXML(virConnectPtr conn, const char *xml)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -10970,7 +11076,7 @@ virNetworkUndefine(virNetworkPtr network)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11026,7 +11132,7 @@ virNetworkUpdate(virNetworkPtr network,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11064,7 +11170,7 @@ virNetworkCreate(virNetworkPtr network)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11104,7 +11210,7 @@ virNetworkDestroy(virNetworkPtr network)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11210,7 +11316,7 @@ virNetworkGetUUID(virNetworkPtr network, unsigned char *uuid)
 
     return 0;
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11239,7 +11345,7 @@ virNetworkGetUUIDString(virNetworkPtr network, char *buf)
     virUUIDFormat(network->uuid, buf);
     return 0;
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11282,7 +11388,7 @@ virNetworkGetXMLDesc(virNetworkPtr network, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return NULL;
 }
@@ -11319,7 +11425,7 @@ virNetworkGetBridgeName(virNetworkPtr network)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return NULL;
 }
@@ -11360,7 +11466,7 @@ virNetworkGetAutostart(virNetworkPtr network,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11400,7 +11506,7 @@ virNetworkSetAutostart(virNetworkPtr network,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(network->conn);
     return -1;
 }
@@ -11485,7 +11591,7 @@ virConnectListAllInterfaces(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -11518,7 +11624,7 @@ virConnectNumOfInterfaces(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -11562,7 +11668,7 @@ virConnectListInterfaces(virConnectPtr conn, char **const names, int maxnames)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -11595,7 +11701,7 @@ virConnectNumOfDefinedInterfaces(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -11641,7 +11747,7 @@ virConnectListDefinedInterfaces(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -11677,7 +11783,7 @@ virInterfaceLookupByName(virConnectPtr conn, const char *name)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -11713,7 +11819,7 @@ virInterfaceLookupByMACString(virConnectPtr conn, const char *macstr)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -11804,7 +11910,7 @@ virInterfaceGetXMLDesc(virInterfacePtr iface, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(iface->conn);
     return NULL;
 }
@@ -11851,7 +11957,7 @@ virInterfaceDefineXML(virConnectPtr conn, const char *xml, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -11899,7 +12005,7 @@ virInterfaceUndefine(virInterfacePtr iface)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(iface->conn);
     return -1;
 }
@@ -11942,7 +12048,7 @@ virInterfaceCreate(virInterfacePtr iface, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(iface->conn);
     return -1;
 }
@@ -11989,7 +12095,7 @@ virInterfaceDestroy(virInterfacePtr iface, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(iface->conn);
     return -1;
 }
@@ -12086,7 +12192,7 @@ virInterfaceChangeBegin(virConnectPtr conn, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12126,7 +12232,7 @@ virInterfaceChangeCommit(virConnectPtr conn, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12167,7 +12273,7 @@ virInterfaceChangeRollback(virConnectPtr conn, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12275,7 +12381,7 @@ virConnectListAllStoragePools(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12308,7 +12414,7 @@ virConnectNumOfStoragePools(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12355,7 +12461,7 @@ virConnectListStoragePools(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12388,7 +12494,7 @@ virConnectNumOfDefinedStoragePools(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12435,7 +12541,7 @@ virConnectListDefinedStoragePools(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -12487,7 +12593,7 @@ virConnectFindStoragePoolSources(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -12523,7 +12629,7 @@ virStoragePoolLookupByName(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -12559,7 +12665,7 @@ virStoragePoolLookupByUUID(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -12595,7 +12701,7 @@ virStoragePoolLookupByUUIDString(virConnectPtr conn,
 
     return virStoragePoolLookupByUUID(conn, uuid);
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -12628,7 +12734,7 @@ virStoragePoolLookupByVolume(virStorageVolPtr vol)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return NULL;
 }
@@ -12669,7 +12775,7 @@ virStoragePoolCreateXML(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -12709,7 +12815,7 @@ virStoragePoolDefineXML(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -12751,7 +12857,7 @@ virStoragePoolBuild(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -12788,7 +12894,7 @@ virStoragePoolUndefine(virStoragePoolPtr pool)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -12827,7 +12933,7 @@ virStoragePoolCreate(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -12868,7 +12974,7 @@ virStoragePoolDestroy(virStoragePoolPtr pool)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -12909,7 +13015,7 @@ virStoragePoolDelete(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13005,7 +13111,7 @@ virStoragePoolRefresh(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13056,7 +13162,7 @@ virStoragePoolGetUUID(virStoragePoolPtr pool,
 
     return 0;
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13085,7 +13191,7 @@ virStoragePoolGetUUIDString(virStoragePoolPtr pool,
     virUUIDFormat(pool->uuid, buf);
     return 0;
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13128,7 +13234,7 @@ virStoragePoolGetInfo(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13167,7 +13273,7 @@ virStoragePoolGetXMLDesc(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return NULL;
 }
@@ -13207,7 +13313,7 @@ virStoragePoolGetAutostart(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13246,7 +13352,7 @@ virStoragePoolSetAutostart(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13292,7 +13398,7 @@ virStoragePoolListAllVolumes(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13325,7 +13431,7 @@ virStoragePoolNumOfVolumes(virStoragePoolPtr pool)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13367,7 +13473,7 @@ virStoragePoolListVolumes(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -13431,7 +13537,7 @@ virStorageVolLookupByName(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return NULL;
 }
@@ -13468,7 +13574,7 @@ virStorageVolLookupByKey(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -13505,7 +13611,7 @@ virStorageVolLookupByPath(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -13596,7 +13702,7 @@ virStorageVolCreateXML(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return NULL;
 }
@@ -13649,7 +13755,7 @@ virStorageVolCreateXMLFrom(virStoragePoolPtr pool,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(pool->conn);
     return NULL;
 }
@@ -13713,7 +13819,7 @@ virStorageVolDownload(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -13779,7 +13885,7 @@ virStorageVolUpload(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -13818,7 +13924,7 @@ virStorageVolDelete(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -13858,7 +13964,7 @@ virStorageVolWipe(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -13901,7 +14007,7 @@ virStorageVolWipePattern(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -13998,7 +14104,7 @@ virStorageVolGetInfo(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -14036,7 +14142,7 @@ virStorageVolGetXMLDesc(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return NULL;
 }
@@ -14076,7 +14182,7 @@ virStorageVolGetPath(virStorageVolPtr vol)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return NULL;
 }
@@ -14151,7 +14257,7 @@ virStorageVolResize(virStorageVolPtr vol,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(vol->conn);
     return -1;
 }
@@ -14189,7 +14295,7 @@ virNodeNumOfDevices(virConnectPtr conn, const char *cap, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -14259,7 +14365,7 @@ virConnectListAllNodeDevices(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -14307,7 +14413,7 @@ virNodeListDevices(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -14342,7 +14448,7 @@ virNodeDeviceLookupByName(virConnectPtr conn, const char *name)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -14385,7 +14491,7 @@ virNodeDeviceLookupSCSIHostByWWN(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -14420,7 +14526,7 @@ virNodeDeviceGetXMLDesc(virNodeDevicePtr dev, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return NULL;
 }
@@ -14506,7 +14612,7 @@ virNodeDeviceNumOfCaps(virNodeDevicePtr dev)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14547,7 +14653,7 @@ virNodeDeviceListCaps(virNodeDevicePtr dev,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14651,7 +14757,7 @@ virNodeDeviceDettach(virNodeDevicePtr dev)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14708,7 +14814,7 @@ virNodeDeviceDetachFlags(virNodeDevicePtr dev,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14749,7 +14855,7 @@ virNodeDeviceReAttach(virNodeDevicePtr dev)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14792,7 +14898,7 @@ virNodeDeviceReset(virNodeDevicePtr dev)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14832,7 +14938,7 @@ virNodeDeviceCreateXML(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -14870,7 +14976,7 @@ virNodeDeviceDestroy(virNodeDevicePtr dev)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dev->conn);
     return -1;
 }
@@ -14928,7 +15034,7 @@ virConnectDomainEventRegister(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -14970,7 +15076,7 @@ virConnectDomainEventDeregister(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -15030,7 +15136,7 @@ virConnectNumOfSecrets(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -15094,7 +15200,7 @@ virConnectListAllSecrets(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -15132,7 +15238,7 @@ virConnectListSecrets(virConnectPtr conn, char **uuids, int maxuuids)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -15170,7 +15276,7 @@ virSecretLookupByUUID(virConnectPtr conn, const unsigned char *uuid)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -15207,7 +15313,7 @@ virSecretLookupByUUIDString(virConnectPtr conn, const char *uuidstr)
 
     return virSecretLookupByUUID(conn, &uuid[0]);
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -15249,7 +15355,7 @@ virSecretLookupByUsage(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -15292,7 +15398,7 @@ virSecretDefineXML(virConnectPtr conn, const char *xml, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -15322,7 +15428,7 @@ virSecretGetUUID(virSecretPtr secret, unsigned char *uuid)
 
     return 0;
 
-error:
+ error:
     virDispatchError(secret->conn);
     return -1;
 }
@@ -15351,7 +15457,7 @@ virSecretGetUUIDString(virSecretPtr secret, char *buf)
     virUUIDFormat(secret->uuid, buf);
     return 0;
 
-error:
+ error:
     virDispatchError(secret->conn);
     return -1;
 }
@@ -15445,7 +15551,7 @@ virSecretGetXMLDesc(virSecretPtr secret, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -15490,7 +15596,7 @@ virSecretSetValue(virSecretPtr secret, const unsigned char *value,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -15533,7 +15639,7 @@ virSecretGetValue(virSecretPtr secret, size_t *value_size, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -15573,7 +15679,7 @@ virSecretUndefine(virSecretPtr secret)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -15788,7 +15894,7 @@ virStreamSend(virStreamPtr stream,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -15881,7 +15987,7 @@ virStreamRecv(virStreamPtr stream,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -15970,7 +16076,7 @@ virStreamSendAll(virStreamPtr stream,
     }
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(bytes);
 
     if (ret != 0)
@@ -16064,7 +16170,7 @@ virStreamRecvAll(virStreamPtr stream,
     }
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(bytes);
 
     if (ret != 0)
@@ -16114,7 +16220,7 @@ virStreamEventAddCallback(virStreamPtr stream,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -16153,7 +16259,7 @@ virStreamEventUpdateCallback(virStreamPtr stream,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -16187,7 +16293,7 @@ virStreamEventRemoveCallback(virStreamPtr stream)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -16228,7 +16334,7 @@ virStreamFinish(virStreamPtr stream)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -16271,7 +16377,7 @@ virStreamAbort(virStreamPtr stream)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(stream->conn);
     return -1;
 }
@@ -16333,7 +16439,7 @@ virDomainIsActive(virDomainPtr dom)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -16366,7 +16472,7 @@ virDomainIsPersistent(virDomainPtr dom)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -16398,7 +16504,7 @@ virDomainIsUpdated(virDomainPtr dom)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -16430,7 +16536,7 @@ virNetworkIsActive(virNetworkPtr net)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(net->conn);
     return -1;
 }
@@ -16463,7 +16569,7 @@ virNetworkIsPersistent(virNetworkPtr net)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(net->conn);
     return -1;
 }
@@ -16495,7 +16601,7 @@ virStoragePoolIsActive(virStoragePoolPtr pool)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -16528,7 +16634,7 @@ virStoragePoolIsPersistent(virStoragePoolPtr pool)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(pool->conn);
     return -1;
 }
@@ -16561,7 +16667,7 @@ virConnectNumOfNWFilters(virConnectPtr conn)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -16609,7 +16715,7 @@ virConnectListAllNWFilters(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -16646,7 +16752,7 @@ virConnectListNWFilters(virConnectPtr conn, char **const names, int maxnames)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -16682,7 +16788,7 @@ virNWFilterLookupByName(virConnectPtr conn, const char *name)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -16718,7 +16824,7 @@ virNWFilterLookupByUUID(virConnectPtr conn, const unsigned char *uuid)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -16754,7 +16860,7 @@ virNWFilterLookupByUUIDString(virConnectPtr conn, const char *uuidstr)
 
     return virNWFilterLookupByUUID(conn, &uuid[0]);
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -16828,7 +16934,7 @@ virNWFilterGetUUID(virNWFilterPtr nwfilter, unsigned char *uuid)
 
     return 0;
 
-error:
+ error:
     virDispatchError(nwfilter->conn);
     return -1;
 }
@@ -16857,7 +16963,7 @@ virNWFilterGetUUIDString(virNWFilterPtr nwfilter, char *buf)
     virUUIDFormat(nwfilter->uuid, buf);
     return 0;
 
-error:
+ error:
     virDispatchError(nwfilter->conn);
     return -1;
 }
@@ -16894,7 +17000,7 @@ virNWFilterDefineXML(virConnectPtr conn, const char *xmlDesc)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -16933,7 +17039,7 @@ virNWFilterUndefine(virNWFilterPtr nwfilter)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(nwfilter->conn);
     return -1;
 }
@@ -16971,7 +17077,7 @@ virNWFilterGetXMLDesc(virNWFilterPtr nwfilter, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(nwfilter->conn);
     return NULL;
 }
@@ -17035,7 +17141,7 @@ virInterfaceIsActive(virInterfacePtr iface)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(iface->conn);
     return -1;
 }
@@ -17066,7 +17172,7 @@ virConnectIsEncrypted(virConnectPtr conn)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17101,7 +17207,7 @@ virConnectIsSecure(virConnectPtr conn)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17140,7 +17246,7 @@ virConnectCompareCPU(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return VIR_CPU_COMPARE_ERROR;
 }
@@ -17187,7 +17293,7 @@ virConnectGetCPUModelNames(virConnectPtr conn, const char *arch, char ***models,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17242,7 +17348,7 @@ virConnectBaselineCPU(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -17288,7 +17394,7 @@ virDomainGetJobInfo(virDomainPtr domain, virDomainJobInfoPtr info)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -17344,7 +17450,7 @@ virDomainGetJobStats(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -17383,7 +17489,7 @@ virDomainAbortJob(virDomainPtr domain)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17424,7 +17530,7 @@ virDomainMigrateSetMaxDowntime(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17465,7 +17571,7 @@ virDomainMigrateGetCompressionCache(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17509,7 +17615,7 @@ virDomainMigrateSetCompressionCache(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17550,7 +17656,7 @@ virDomainMigrateSetMaxSpeed(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17591,7 +17697,7 @@ virDomainMigrateGetMaxSpeed(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17673,7 +17779,7 @@ virConnectDomainEventRegisterAny(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17710,7 +17816,7 @@ virConnectDomainEventDeregisterAny(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17796,7 +17902,7 @@ virConnectNetworkEventRegisterAny(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17834,7 +17940,7 @@ virConnectNetworkEventDeregisterAny(virConnectPtr conn,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17902,7 +18008,7 @@ virDomainManagedSave(virDomainPtr dom, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17943,7 +18049,7 @@ virDomainHasManagedSaveImage(virDomainPtr dom, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -17983,7 +18089,7 @@ virDomainManagedSaveRemove(virDomainPtr dom, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18211,7 +18317,7 @@ virDomainSnapshotCreateXML(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -18259,7 +18365,7 @@ virDomainSnapshotGetXMLDesc(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -18326,7 +18432,7 @@ virDomainSnapshotNum(virDomainPtr domain, unsigned int flags)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18413,7 +18519,7 @@ virDomainSnapshotListNames(virDomainPtr domain, char **names, int nameslen,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18494,7 +18600,7 @@ virDomainListAllSnapshots(virDomainPtr domain, virDomainSnapshotPtr **snaps,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18561,7 +18667,7 @@ virDomainSnapshotNumChildren(virDomainSnapshotPtr snapshot, unsigned int flags)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18653,7 +18759,7 @@ virDomainSnapshotListChildrenNames(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18736,7 +18842,7 @@ virDomainSnapshotListAllChildren(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18779,7 +18885,7 @@ virDomainSnapshotLookupByName(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -18814,7 +18920,7 @@ virDomainHasCurrentSnapshot(virDomainPtr domain, unsigned int flags)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18853,7 +18959,7 @@ virDomainSnapshotCurrent(virDomainPtr domain,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -18892,7 +18998,7 @@ virDomainSnapshotGetParent(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return NULL;
 }
@@ -18930,7 +19036,7 @@ virDomainSnapshotIsCurrent(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -18969,7 +19075,7 @@ virDomainSnapshotHasMetadata(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -19050,7 +19156,7 @@ virDomainRevertToSnapshot(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -19112,7 +19218,7 @@ virDomainSnapshotDelete(virDomainSnapshotPtr snapshot,
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -19239,7 +19345,7 @@ virDomainOpenConsole(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -19303,7 +19409,7 @@ virDomainOpenChannel(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -19375,7 +19481,7 @@ virDomainBlockJobAbort(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19429,7 +19535,7 @@ virDomainGetBlockJobInfo(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19481,7 +19587,7 @@ virDomainBlockJobSetSpeed(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19547,7 +19653,7 @@ virDomainBlockPull(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19671,7 +19777,7 @@ virDomainBlockRebase(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19771,7 +19877,7 @@ virDomainBlockCommit(virDomainPtr dom, const char *disk,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19848,7 +19954,7 @@ virDomainOpenGraphics(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -19902,7 +20008,7 @@ virConnectSetKeepAlive(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -19936,7 +20042,7 @@ virConnectIsAlive(virConnectPtr conn)
     }
 
     virReportUnsupportedError();
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -20000,7 +20106,7 @@ virConnectRegisterCloseCallback(virConnectPtr conn,
 
     return 0;
 
-error:
+ error:
     virObjectUnlock(conn->closeCallback);
     virMutexUnlock(&conn->lock);
     virDispatchError(conn);
@@ -20054,7 +20160,7 @@ virConnectUnregisterCloseCallback(virConnectPtr conn,
 
     return 0;
 
-error:
+ error:
     virObjectUnlock(conn->closeCallback);
     virMutexUnlock(&conn->lock);
     virDispatchError(conn);
@@ -20118,7 +20224,7 @@ virDomainSetBlockIoTune(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -20205,7 +20311,7 @@ virDomainGetBlockIoTune(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -20348,7 +20454,7 @@ virDomainGetCPUStats(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -20410,7 +20516,7 @@ virDomainGetDiskErrors(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }
@@ -20451,7 +20557,7 @@ virDomainGetHostname(virDomainPtr domain, unsigned int flags)
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(domain->conn);
     return NULL;
 }
@@ -20499,7 +20605,7 @@ virNodeGetCPUMap(virConnectPtr conn,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -20548,7 +20654,7 @@ virDomainFSTrim(virDomainPtr dom,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(dom->conn);
     return -1;
 }

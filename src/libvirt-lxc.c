@@ -39,6 +39,8 @@
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
+VIR_LOG_INIT("libvirt-lxc");
+
 /**
  * virDomainLxcOpenNamespace:
  * @domain: a domain object
@@ -87,7 +89,7 @@ virDomainLxcOpenNamespace(virDomainPtr domain,
 
     virReportUnsupportedError();
 
-error:
+ error:
     virDispatchError(conn);
     return -1;
 }
@@ -154,7 +156,7 @@ virDomainLxcEnterNamespace(virDomainPtr domain,
 
     return 0;
 
-error:
+ error:
     virDispatchError(domain->conn);
     return -1;
 }
@@ -264,7 +266,7 @@ virDomainLxcEnterSecurityLabel(virSecurityModelPtr model,
 
     return 0;
 
-error:
+ error:
     virDispatchError(NULL);
     return -1;
 }

@@ -39,6 +39,8 @@
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
+VIR_LOG_INIT("tests.securityselinuxtest");
+
 struct testSELinuxGenLabelData {
     virSecurityManagerPtr mgr;
 
@@ -91,7 +93,7 @@ testBuildDomainDef(bool dynamic,
 
     return def;
 
-error:
+ error:
     virDomainDefFree(def);
     return NULL;
 }
@@ -255,7 +257,7 @@ testSELinuxGenLabel(const void *opaque)
 
     ret = 0;
 
-cleanup:
+ cleanup:
     context_free(con);
     context_free(imgcon);
     virDomainDefFree(def);

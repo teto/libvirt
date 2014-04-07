@@ -22,6 +22,7 @@
 #include <config.h>
 
 #include <poll.h>
+#include <regex.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -40,7 +41,8 @@
 # include <sys/apparmor.h>
 #endif
 
-#include "vircommand.h"
+#define __VIR_COMMAND_PRIV_H_ALLOW__
+#include "vircommandpriv.h"
 #include "viralloc.h"
 #include "virerror.h"
 #include "virutil.h"
@@ -53,6 +55,8 @@
 #include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
+
+VIR_LOG_INIT("util.command");
 
 /* Flags for virExec */
 enum {
@@ -132,6 +136,9 @@ struct _virCommand {
 
 /* See virCommandSetDryRun for description for this variable */
 static virBufferPtr dryRunBuffer;
+static virCommandDryRunCallback dryRunCallback;
+static void *dryRunOpaque;
+static int dryRunStatus;
 
 /*
  * virCommandFDIsSet:
@@ -1857,6 +1864,11 @@ virCommandProcessIO(virCommandPtr cmd)
     size_t inoff = 0;
     int ret = 0;
 
+    if (dryRunBuffer || dryRunCallback) {
+        VIR_DEBUG("Dry run requested, skipping I/O processing");
+        return 0;
+    }
+
     /* With an input buffer, feed data to child
      * via pipe */
     if (cmd->inbuf)
@@ -1981,7 +1993,7 @@ virCommandProcessIO(virCommandPtr cmd)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     if (cmd->outbuf && *cmd->outbuf)
         (*cmd->outbuf)[outlen] = '\0';
     if (cmd->errbuf && *cmd->errbuf)
@@ -2264,16 +2276,25 @@ virCommandRunAsync(virCommandPtr cmd, pid_t *pid)
     }
 
     str = virCommandToString(cmd);
-    if (dryRunBuffer) {
+    if (dryRunBuffer || dryRunCallback) {
+        dryRunStatus = 0;
         if (!str) {
             /* error already reported by virCommandToString */
             goto cleanup;
         }
 
-        VIR_DEBUG("Dry run requested, appending stringified "
-                  "command to dryRunBuffer=%p", dryRunBuffer);
-        virBufferAdd(dryRunBuffer, str, -1);
-        virBufferAddChar(dryRunBuffer, '\n');
+        if (dryRunBuffer) {
+            VIR_DEBUG("Dry run requested, appending stringified "
+                      "command to dryRunBuffer=%p", dryRunBuffer);
+            virBufferAdd(dryRunBuffer, str, -1);
+            virBufferAddChar(dryRunBuffer, '\n');
+        }
+        if (dryRunCallback) {
+            dryRunCallback((const char *const*)cmd->args,
+                           (const char *const*)cmd->env,
+                           cmd->inbuf, cmd->outbuf, cmd->errbuf,
+                           &dryRunStatus, dryRunOpaque);
+        }
         ret = 0;
         goto cleanup;
     }
@@ -2312,7 +2333,7 @@ virCommandRunAsync(virCommandPtr cmd, pid_t *pid)
         }
     }
 
-cleanup:
+ cleanup:
     if (ret < 0) {
         VIR_FORCE_CLOSE(cmd->infd);
         VIR_FORCE_CLOSE(cmd->inpipe);
@@ -2353,10 +2374,11 @@ virCommandWait(virCommandPtr cmd, int *exitstatus)
         return -1;
     }
 
-    if (dryRunBuffer) {
-        VIR_DEBUG("Dry run requested, claiming success");
+    if (dryRunBuffer || dryRunCallback) {
+        VIR_DEBUG("Dry run requested, returning status %d",
+                  dryRunStatus);
         if (exitstatus)
-            *exitstatus = 0;
+            *exitstatus = dryRunStatus;
         return 0;
     }
 
@@ -2701,6 +2723,7 @@ virCommandDoAsyncIO(virCommandPtr cmd)
 /**
  * virCommandSetDryRun:
  * @buf: buffer to store stringified commands
+ * @callback: callback to process input/output/args
  *
  * Sometimes it's desired to not actually run given command, but
  * see its string representation without having to change the
@@ -2709,8 +2732,13 @@ virCommandDoAsyncIO(virCommandPtr cmd)
  * virCommandRun* API. The virCommandSetDryRun allows you to
  * modify this behavior: once called, every call to
  * virCommandRun* results in command string representation being
- * appended to @buf instead of being executed. the strings are
- * escaped for a shell and separated by a newline. For example:
+ * appended to @buf instead of being executed. If @callback is
+ * provided, then it is invoked with the argv, env and stdin
+ * data string for the command. It is expected to fill the stdout
+ * and stderr data strings and exit status variables.
+ *
+ * The strings stored in @buf are escaped for a shell and
+ * separated by a newline. For example:
  *
  * virBuffer buffer = VIR_BUFFER_INITIALIZER;
  * virCommandSetDryRun(&buffer);
@@ -2722,10 +2750,247 @@ virCommandDoAsyncIO(virCommandPtr cmd)
  *
  * /bin/echo 'Hello world'\n
  *
- * To cancel this effect pass NULL.
+ * To cancel this effect pass NULL for @buf and @callback.
  */
 void
-virCommandSetDryRun(virBufferPtr buf)
+virCommandSetDryRun(virBufferPtr buf,
+                    virCommandDryRunCallback cb,
+                    void *opaque)
 {
     dryRunBuffer = buf;
+    dryRunCallback = cb;
+    dryRunOpaque = opaque;
 }
+
+#ifndef WIN32
+/*
+ * Run an external program.
+ *
+ * Read its output and apply a series of regexes to each line
+ * When the entire set of regexes has matched consecutively
+ * then run a callback passing in all the matches
+ */
+int
+virCommandRunRegex(virCommandPtr cmd,
+                   int nregex,
+                   const char **regex,
+                   int *nvars,
+                   virCommandRunRegexFunc func,
+                   void *data,
+                   const char *prefix)
+{
+    int err;
+    regex_t *reg;
+    regmatch_t *vars = NULL;
+    size_t i, j, k;
+    int totgroups = 0, ngroup = 0, maxvars = 0;
+    char **groups;
+    char *outbuf = NULL;
+    char **lines = NULL;
+    int ret = -1;
+
+    /* Compile all regular expressions */
+    if (VIR_ALLOC_N(reg, nregex) < 0)
+        return -1;
+
+    for (i = 0; i < nregex; i++) {
+        err = regcomp(&reg[i], regex[i], REG_EXTENDED);
+        if (err != 0) {
+            char error[100];
+            regerror(err, &reg[i], error, sizeof(error));
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("Failed to compile regex %s"), error);
+            for (j = 0; j < i; j++)
+                regfree(&reg[j]);
+            VIR_FREE(reg);
+            return -1;
+        }
+
+        totgroups += nvars[i];
+        if (nvars[i] > maxvars)
+            maxvars = nvars[i];
+
+    }
+
+    /* Storage for matched variables */
+    if (VIR_ALLOC_N(groups, totgroups) < 0)
+        goto cleanup;
+    if (VIR_ALLOC_N(vars, maxvars+1) < 0)
+        goto cleanup;
+
+    virCommandSetOutputBuffer(cmd, &outbuf);
+    if (virCommandRun(cmd, NULL) < 0)
+        goto cleanup;
+
+    if (!outbuf) {
+        /* no output */
+        ret = 0;
+        goto cleanup;
+    }
+
+    if (!(lines = virStringSplit(outbuf, "\n", 0)))
+        goto cleanup;
+
+    for (k = 0; lines[k]; k++) {
+        const char *p = NULL;
+
+        /* ignore any command prefix */
+        if (prefix)
+            p = STRSKIP(lines[k], prefix);
+        if (!p)
+            p = lines[k];
+
+        ngroup = 0;
+        for (i = 0; i < nregex; i++) {
+            if (regexec(&reg[i], p, nvars[i]+1, vars, 0) != 0)
+                break;
+
+            /* NB vars[0] is the full pattern, so we offset j by 1 */
+            for (j = 1; j <= nvars[i]; j++) {
+                if (VIR_STRNDUP(groups[ngroup++], p + vars[j].rm_so,
+                                vars[j].rm_eo - vars[j].rm_so) < 0)
+                    goto cleanup;
+            }
+
+        }
+        /* We've matched on the last regex, so callback time */
+        if (i == nregex) {
+            if (((*func)(groups, data)) < 0)
+                goto cleanup;
+        }
+
+        for (j = 0; j < ngroup; j++)
+            VIR_FREE(groups[j]);
+    }
+
+    ret = 0;
+ cleanup:
+    virStringFreeList(lines);
+    VIR_FREE(outbuf);
+    if (groups) {
+        for (j = 0; j < totgroups; j++)
+            VIR_FREE(groups[j]);
+        VIR_FREE(groups);
+    }
+    VIR_FREE(vars);
+
+    for (i = 0; i < nregex; i++)
+        regfree(&reg[i]);
+
+    VIR_FREE(reg);
+    return ret;
+}
+
+/*
+ * Run an external program and read from its standard output
+ * a stream of tokens from IN_STREAM, applying FUNC to
+ * each successive sequence of N_COLUMNS tokens.
+ * If FUNC returns < 0, stop processing input and return -1.
+ * Return -1 if N_COLUMNS == 0.
+ * Return -1 upon memory allocation error.
+ * If the number of input tokens is not a multiple of N_COLUMNS,
+ * then the final FUNC call will specify a number smaller than N_COLUMNS.
+ * If there are no input tokens (empty input), call FUNC with N_COLUMNS == 0.
+ */
+int
+virCommandRunNul(virCommandPtr cmd,
+                 size_t n_columns,
+                 virCommandRunNulFunc func,
+                 void *data)
+{
+    size_t n_tok = 0;
+    int fd = -1;
+    FILE *fp = NULL;
+    char **v;
+    int ret = -1;
+    size_t i;
+
+    if (n_columns == 0)
+        return -1;
+
+    if (VIR_ALLOC_N(v, n_columns) < 0)
+        return -1;
+    for (i = 0; i < n_columns; i++)
+        v[i] = NULL;
+
+    virCommandSetOutputFD(cmd, &fd);
+    if (virCommandRunAsync(cmd, NULL) < 0) {
+        goto cleanup;
+    }
+
+    if ((fp = VIR_FDOPEN(fd, "r")) == NULL) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       "%s", _("cannot open file using fd"));
+        goto cleanup;
+    }
+
+    while (1) {
+        char *buf = NULL;
+        size_t buf_len = 0;
+        /* Be careful: even when it returns -1,
+           this use of getdelim allocates memory.  */
+        ssize_t tok_len = getdelim(&buf, &buf_len, 0, fp);
+        v[n_tok] = buf;
+        if (tok_len < 0) {
+            /* Maybe EOF, maybe an error.
+               If n_tok > 0, then we know it's an error.  */
+            if (n_tok && func(n_tok, v, data) < 0)
+                goto cleanup;
+            break;
+        }
+        ++n_tok;
+        if (n_tok == n_columns) {
+            if (func(n_tok, v, data) < 0)
+                goto cleanup;
+            n_tok = 0;
+            for (i = 0; i < n_columns; i++) {
+                VIR_FREE(v[i]);
+            }
+        }
+    }
+
+    if (feof(fp) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("read error on pipe"));
+        goto cleanup;
+    }
+
+    ret = virCommandWait(cmd, NULL);
+ cleanup:
+    for (i = 0; i < n_columns; i++)
+        VIR_FREE(v[i]);
+    VIR_FREE(v);
+
+    VIR_FORCE_FCLOSE(fp);
+    VIR_FORCE_CLOSE(fd);
+
+    return ret;
+}
+
+#else /* WIN32 */
+
+int
+virCommandRunRegex(virCommandPtr cmd ATTRIBUTE_UNUSED,
+                   int nregex ATTRIBUTE_UNUSED,
+                   const char **regex ATTRIBUTE_UNUSED,
+                   int *nvars ATTRIBUTE_UNUSED,
+                   virCommandRunRegexFunc func ATTRIBUTE_UNUSED,
+                   void *data ATTRIBUTE_UNUSED,
+                   const char *prefix ATTRIBUTE_UNUSED)
+{
+    virReportError(VIR_ERR_INTERNAL_ERROR,
+                   _("%s not implemented on Win32"), __FUNCTION__);
+    return -1;
+}
+
+int
+virCommandRunNul(virCommandPtr cmd ATTRIBUTE_UNUSED,
+                 size_t n_columns ATTRIBUTE_UNUSED,
+                 virCommandRunNulFunc func ATTRIBUTE_UNUSED,
+                 void *data ATTRIBUTE_UNUSED)
+{
+    virReportError(VIR_ERR_INTERNAL_ERROR,
+                   _("%s not implemented on Win32"), __FUNCTION__);
+    return -1;
+}
+#endif /* WIN32 */

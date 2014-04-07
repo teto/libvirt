@@ -1,6 +1,7 @@
 /*
- * Copyright (C) 2007-2009, 2013 Red Hat, Inc.
- * Copyright (C) 2009 IBM Corp.
+ * bhyve_capabilities.h: bhyve capabilities module
+ *
+ * Copyright (C) 2014 Semihalf
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,22 +17,13 @@
  * License along with this library.  If not, see
  * <http://www.gnu.org/licenses/>.
  *
- * Authors:
- *     Gerhard Stenzel <gerhard.stenzel@de.ibm.com>
  */
 
-#ifndef __QEMUD_BRIDGE_FILTER_H__
-# define __QEMUD_BRIDGE_FILTER_H__
+#ifndef _BHYVE_CAPABILITIES
+# define _BHYVE_CAPABILITIES
 
+# include "capabilities.h"
 
-int networkAllowMacOnPort(virQEMUDriverPtr driver,
-                          const char *ifname,
-                          const virMacAddr *mac);
-int networkDisallowMacOnPort(virQEMUDriverPtr driver,
-                             const char *ifname,
-                             const virMacAddr *mac);
-int networkDisableAllFrames(virQEMUDriverPtr driver);
-int networkAddEbtablesRules(virQEMUDriverPtr driver);
+virCapsPtr virBhyveCapsBuild(void);
 
-
-#endif /* __QEMUD_BRIDGE_FILTER_H__ */
+#endif

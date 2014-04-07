@@ -60,6 +60,8 @@
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
+VIR_LOG_INIT("tests.testutils");
+
 #define GETTIMEOFDAY(T) gettimeofday(T, NULL)
 #define DIFF_MSEC(T, U)                                 \
     ((((int) ((T)->tv_sec - (U)->tv_sec)) * 1000000.0 + \
@@ -360,7 +362,8 @@ virtTestLoadFile(const char *file, char **buf)
 #ifndef WIN32
 static
 void virtTestCaptureProgramExecChild(const char *const argv[],
-                                     int pipefd) {
+                                     int pipefd)
+{
     size_t i;
     int open_max;
     int stdinfd = -1;
@@ -584,7 +587,7 @@ struct virtTestLogData {
 static struct virtTestLogData testLog = { VIR_BUFFER_INITIALIZER };
 
 static void
-virtTestLogOutput(virLogSource source ATTRIBUTE_UNUSED,
+virtTestLogOutput(virLogSourcePtr source ATTRIBUTE_UNUSED,
                   virLogPriority priority ATTRIBUTE_UNUSED,
                   const char *filename ATTRIBUTE_UNUSED,
                   int lineno ATTRIBUTE_UNUSED,
@@ -627,7 +630,8 @@ virtTestLogContentAndReset(void)
 
 
 static unsigned int
-virTestGetFlag(const char *name) {
+virTestGetFlag(const char *name)
+{
     char *flagStr;
     unsigned int flag;
 
@@ -641,21 +645,24 @@ virTestGetFlag(const char *name) {
 }
 
 unsigned int
-virTestGetDebug(void) {
+virTestGetDebug(void)
+{
     if (testDebug == -1)
         testDebug = virTestGetFlag("VIR_TEST_DEBUG");
     return testDebug;
 }
 
 unsigned int
-virTestGetVerbose(void) {
+virTestGetVerbose(void)
+{
     if (testVerbose == -1)
         testVerbose = virTestGetFlag("VIR_TEST_VERBOSE");
     return testVerbose || virTestGetDebug();
 }
 
 unsigned int
-virTestGetExpensive(void) {
+virTestGetExpensive(void)
+{
     if (testExpensive == -1)
         testExpensive = virTestGetFlag("VIR_TEST_EXPENSIVE");
     return testExpensive;
@@ -877,7 +884,7 @@ virCapsPtr virTestGenericCapsInit(void)
 
     return caps;
 
-error:
+ error:
     virObjectUnref(caps);
     return NULL;
 }

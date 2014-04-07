@@ -1,7 +1,7 @@
 /*
  * qemu_command.h: QEMU command generation
  *
- * Copyright (C) 2006-2013 Red Hat, Inc.
+ * Copyright (C) 2006-2014 Red Hat, Inc.
  * Copyright (C) 2006 Daniel P. Berrange
  *
  * This library is free software; you can redistribute it and/or
@@ -76,7 +76,8 @@ virCommandPtr qemuBuildCommandLine(virConnectPtr conn,
                                    int migrateFd,
                                    virDomainSnapshotObjPtr current_snapshot,
                                    enum virNetDevVPortProfileOp vmop,
-                                   qemuBuildCommandLineCallbacksPtr callbacks)
+                                   qemuBuildCommandLineCallbacksPtr callbacks,
+                                   bool forXMLToArgv)
     ATTRIBUTE_NONNULL(1) ATTRIBUTE_NONNULL(11);
 
 /* Generate '-device' string for chardev device */
@@ -184,7 +185,7 @@ char * qemuBuildRedirdevDevStr(virDomainDefPtr def,
 char *qemuBuildNetworkDriveURI(int proto,
                                const char *src,
                                size_t nhosts,
-                               virDomainDiskHostDefPtr hosts,
+                               virStorageNetHostDefPtr hosts,
                                const char *username,
                                const char *secret);
 
@@ -317,7 +318,7 @@ int qemuGetDriveSourceString(int type,
                              const char *src,
                              int protocol,
                              size_t nhosts,
-                             virDomainDiskHostDefPtr hosts,
+                             virStorageNetHostDefPtr hosts,
                              const char *username,
                              const char *secret,
                              char **path);

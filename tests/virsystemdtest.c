@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Red Hat, Inc.
+ * Copyright (C) 2013, 2014 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -30,6 +30,8 @@
 # include "virlog.h"
 
 # define VIR_FROM_THIS VIR_FROM_NONE
+
+VIR_LOG_INIT("tests.systemdtest");
 
 static int testCreateContainer(const void *opaque ATTRIBUTE_UNUSED)
 {
@@ -273,7 +275,7 @@ mymain(void)
     TEST_SCOPE("demo", "/machine/eng-dept/testing!stuff",
                "machine-eng\\x2ddept-testing\\x21stuff-lxc\\x2ddemo.scope");
 
-    return ret==0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 VIRT_TEST_MAIN_PRELOAD(mymain, abs_builddir "/.libs/virsystemdmock.so")

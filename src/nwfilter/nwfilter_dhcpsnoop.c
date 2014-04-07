@@ -72,6 +72,8 @@
 
 #define VIR_FROM_THIS VIR_FROM_NWFILTER
 
+VIR_LOG_INIT("nwfilter.nwfilter_dhcpsnoop");
+
 #ifdef HAVE_LIBPCAP
 
 # define LEASEFILE_DIR LOCALSTATEDIR "/run/libvirt/network/"
@@ -496,7 +498,7 @@ virNWFilterSnoopIPLeaseInstallRule(virNWFilterSnoopIPLeasePtr ipl,
                                               req->filtername,
                                               req->vars);
 
-exit_snooprequnlock:
+ exit_snooprequnlock:
     virNWFilterSnoopReqUnlock(req);
 
     VIR_FREE(ipaddr);
@@ -603,10 +605,10 @@ virNWFilterSnoopReqNew(const char *ifkey)
 
     return req;
 
-err_destroy_mutex:
+ err_destroy_mutex:
     virMutexDestroy(&req->lock);
 
-err_free_req:
+ err_free_req:
     VIR_FREE(req);
 
     return NULL;
@@ -784,7 +786,7 @@ virNWFilterSnoopReqLeaseAdd(virNWFilterSnoopReqPtr req,
 
     virAtomicIntInc(&virNWFilterSnoopState.nLeases);
 
-exit:
+ exit:
     if (update_leasefile)
         virNWFilterSnoopLeaseFileSave(pl);
 
@@ -895,12 +897,12 @@ virNWFilterSnoopReqLeaseDel(virNWFilterSnoopReqPtr req,
 
     }
 
-skip_instantiate:
+ skip_instantiate:
     VIR_FREE(ipl);
 
     virAtomicIntDecAndTest(&virNWFilterSnoopState.nLeases);
 
-lease_not_found:
+ lease_not_found:
     VIR_FREE(ipstr);
 
     virNWFilterSnoopReqUnlock(req);
@@ -958,7 +960,7 @@ virNWFilterSnoopDHCPGetOpt(virNWFilterSnoopDHCPHdrPtr pd, int len,
         oind += pd->d_opts[oind + 1] + 2;
     }
     return 0;
-malformed:
+ malformed:
     VIR_WARN("got lost in the options!");
     return -1;
 }
@@ -1147,11 +1149,11 @@ virNWFilterSnoopDHCPOpen(const char *ifname, virMacAddr *mac,
 
     return handle;
 
-cleanup_freecode:
+ cleanup_freecode:
     pcap_freecode(&fp);
-cleanup:
+ cleanup:
     pcap_close(handle);
-cleanup_nohandle:
+ cleanup_nohandle:
     VIR_FREE(ext_filter);
 
     return NULL;
@@ -1560,7 +1562,7 @@ virNWFilterDHCPSnoopThread(void *req0)
     virNWFilterSnoopReqUnlock(req);
     virNWFilterSnoopUnlock();
 
-exit:
+ exit:
     virThreadPoolFree(worker);
 
     virNWFilterSnoopReqPut(req);
@@ -1603,6 +1605,7 @@ virNWFilterDHCPSnoopReq(virNWFilterTechDriverPtr techdriver,
     int tmp;
     virThread thread;
     virNWFilterVarValuePtr dhcpsrvrs;
+    bool threadPuts = false;
 
     virNWFilterSnoopIFKeyFMT(ifkey, vmuuid, macaddr);
 
@@ -1696,6 +1699,8 @@ virNWFilterDHCPSnoopReq(virNWFilterTechDriverPtr techdriver,
         goto exit_snoopreq_unlock;
     }
 
+    threadPuts = true;
+
     virAtomicIntInc(&virNWFilterSnoopState.nThreads);
 
     req->threadkey = virNWFilterSnoopActivate(req);
@@ -1726,16 +1731,17 @@ virNWFilterDHCPSnoopReq(virNWFilterTechDriverPtr techdriver,
 
     return 0;
 
-exit_snoop_cancel:
+ exit_snoop_cancel:
     virNWFilterSnoopCancel(&req->threadkey);
-exit_snoopreq_unlock:
+ exit_snoopreq_unlock:
     virNWFilterSnoopReqUnlock(req);
-exit_rem_ifnametokey:
+ exit_rem_ifnametokey:
     virHashRemoveEntry(virNWFilterSnoopState.ifnameToKey, ifname);
-exit_snoopunlock:
+ exit_snoopunlock:
     virNWFilterSnoopUnlock();
-exit_snoopreqput:
-    virNWFilterSnoopReqPut(req);
+ exit_snoopreqput:
+    if (!threadPuts)
+        virNWFilterSnoopReqPut(req);
 
     return -1;
 }
@@ -1793,7 +1799,7 @@ virNWFilterSnoopLeaseFileWrite(int lfd, const char *ifkey,
 
     ignore_value(fsync(lfd));
 
-cleanup:
+ cleanup:
     VIR_FREE(lbuf);
     VIR_FREE(dhcpstr);
     VIR_FREE(ipstr);
@@ -1825,7 +1831,7 @@ virNWFilterSnoopLeaseFileSave(virNWFilterSnoopIPLeasePtr ipl)
         virAtomicIntGet(&virNWFilterSnoopState.nLeases) * 20)
         virNWFilterSnoopLeaseFileLoad();   /* load & refresh lease file */
 
-err_exit:
+ err_exit:
     virNWFilterSnoopUnlock();
 }
 
@@ -1929,7 +1935,7 @@ virNWFilterSnoopLeaseFileRefresh(void)
     }
     virAtomicIntSet(&virNWFilterSnoopState.wLeases, 0);
 
-skip_rename:
+ skip_rename:
     virNWFilterSnoopLeaseFileOpen();
 }
 
@@ -2101,7 +2107,7 @@ virNWFilterDHCPSnoopInit(void)
 
     return 0;
 
-err_exit:
+ err_exit:
     virHashFree(virNWFilterSnoopState.ifnameToKey);
     virNWFilterSnoopState.ifnameToKey = NULL;
 
@@ -2176,7 +2182,7 @@ virNWFilterDHCPSnoopEnd(const char *ifname)
         virNWFilterSnoopLeaseFileLoad();
     }
 
-cleanup:
+ cleanup:
     virNWFilterSnoopUnlock();
 }
 

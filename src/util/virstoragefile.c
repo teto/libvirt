@@ -1,7 +1,7 @@
 /*
  * virstoragefile.c: file utility functions for FS storage backend
  *
- * Copyright (C) 2007-2013 Red Hat, Inc.
+ * Copyright (C) 2007-2014 Red Hat, Inc.
  * Copyright (C) 2007-2008 Daniel P. Berrange
  *
  * This library is free software; you can redistribute it and/or
@@ -28,12 +28,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#ifdef __linux__
-# if HAVE_LINUX_MAGIC_H
-#  include <linux/magic.h>
-# endif
-# include <sys/statfs.h>
-#endif
 #include "dirname.h"
 #include "viralloc.h"
 #include "virerror.h"
@@ -51,6 +45,16 @@
 
 #define VIR_FROM_THIS VIR_FROM_STORAGE
 
+VIR_LOG_INIT("util.storagefile");
+
+VIR_ENUM_IMPL(virStorage, VIR_STORAGE_TYPE_LAST,
+              "none",
+              "file",
+              "block",
+              "dir",
+              "network",
+              "volume")
+
 VIR_ENUM_IMPL(virStorageFileFormat,
               VIR_STORAGE_FILE_LAST,
               "none",
@@ -63,6 +67,29 @@ VIR_ENUM_IMPL(virStorageFileFeature,
               VIR_STORAGE_FILE_FEATURE_LAST,
               "lazy_refcounts",
               )
+
+VIR_ENUM_IMPL(virStorageNetProtocol, VIR_STORAGE_NET_PROTOCOL_LAST,
+              "nbd",
+              "rbd",
+              "sheepdog",
+              "gluster",
+              "iscsi",
+              "http",
+              "https",
+              "ftp",
+              "ftps",
+              "tftp")
+
+VIR_ENUM_IMPL(virStorageNetHostTransport, VIR_STORAGE_NET_HOST_TRANS_LAST,
+              "tcp",
+              "unix",
+              "rdma")
+
+VIR_ENUM_IMPL(virStorageSourcePoolMode,
+              VIR_STORAGE_SOURCE_POOL_MODE_LAST,
+              "default",
+              "host",
+              "direct")
 
 enum lv_endian {
     LV_LITTLE_ENDIAN = 1, /* 1234 */
@@ -315,7 +342,7 @@ qcow2GetBackingStoreFormat(int *format,
         offset += len;
     }
 
-done:
+ done:
 
     return 0;
 }
@@ -482,7 +509,7 @@ vmdk4GetBackingStore(char **res,
 
     ret = BACKING_STORE_OK;
 
-cleanup:
+ cleanup:
     VIR_FREE(desc);
     return ret;
 }
@@ -582,7 +609,7 @@ virFindBackingFile(const char *start, bool start_is_dir, const char *path,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     if (combined != path)
         VIR_FREE(combined);
     return ret;
@@ -712,7 +739,7 @@ virStorageFileProbeFormatFromBuf(const char *path,
         }
     }
 
-cleanup:
+ cleanup:
     VIR_DEBUG("format=%d", format);
     return format;
 }
@@ -811,7 +838,8 @@ virStorageFileGetMetadataInternal(const char *path,
 
         crypt_format = virReadBufInt32BE(buf +
                                          fileTypeInfo[format].qcowCryptOffset);
-        meta->encrypted = crypt_format != 0;
+        if (crypt_format && VIR_ALLOC(meta->encryption) < 0)
+            goto cleanup;
     }
 
     if (fileTypeInfo[format].getBackingStore != NULL) {
@@ -866,11 +894,11 @@ virStorageFileGetMetadataInternal(const char *path,
         VIR_STRDUP(meta->compat, "1.1") < 0)
         goto cleanup;
 
-done:
+ done:
     ret = meta;
     meta = NULL;
 
-cleanup:
+ cleanup:
     virStorageFileFreeMetadata(meta);
     return ret;
 }
@@ -926,7 +954,7 @@ virStorageFileProbeFormat(const char *path, uid_t uid, gid_t gid)
 
     ret = virStorageFileProbeFormatFromBuf(path, header, len);
 
-cleanup:
+ cleanup:
     VIR_FREE(header);
     VIR_FORCE_CLOSE(fd);
 
@@ -1002,7 +1030,7 @@ virStorageFileGetMetadataFromFDInternal(const char *path,
     }
 
     ret = virStorageFileGetMetadataInternal(path, buf, len, directory, format);
-cleanup:
+ cleanup:
     VIR_FREE(buf);
     return ret;
 }
@@ -1116,7 +1144,7 @@ virStorageFileGetMetadata(const char *path, int format,
     virHashTablePtr cycle = virHashCreate(5, NULL);
     virStorageFileMetadataPtr ret;
 
-    if (!cycle)
+    if (!cycle || !path)
         return NULL;
 
     if (format <= VIR_STORAGE_FILE_NONE)
@@ -1161,7 +1189,7 @@ virStorageFileChainGetBroken(virStorageFileMetadataPtr chain,
 
     ret = 0;
 
-error:
+ error:
     return ret;
 }
 
@@ -1183,6 +1211,7 @@ virStorageFileFreeMetadata(virStorageFileMetadata *meta)
     VIR_FREE(meta->compat);
     VIR_FREE(meta->directory);
     virBitmapFree(meta->features);
+    virStorageEncryptionFree(meta->encryption);
     VIR_FREE(meta);
 }
 
@@ -1246,131 +1275,20 @@ virStorageFileResize(const char *path,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FORCE_CLOSE(fd);
     return ret;
 }
 
-#ifdef __linux__
-
-# ifndef NFS_SUPER_MAGIC
-#  define NFS_SUPER_MAGIC 0x6969
-# endif
-# ifndef OCFS2_SUPER_MAGIC
-#  define OCFS2_SUPER_MAGIC 0x7461636f
-# endif
-# ifndef GFS2_MAGIC
-#  define GFS2_MAGIC 0x01161970
-# endif
-# ifndef AFS_FS_MAGIC
-#  define AFS_FS_MAGIC 0x6B414653
-# endif
-# ifndef SMB_SUPER_MAGIC
-#  define SMB_SUPER_MAGIC 0x517B
-# endif
-# ifndef CIFS_SUPER_MAGIC
-#  define CIFS_SUPER_MAGIC 0xFF534D42
-# endif
-
-
-int virStorageFileIsSharedFSType(const char *path,
-                                 int fstypes)
-{
-    char *dirpath, *p;
-    struct statfs sb;
-    int statfs_ret;
-
-    if (VIR_STRDUP(dirpath, path) < 0)
-        return -1;
-
-    do {
-
-        /* Try less and less of the path until we get to a
-         * directory we can stat. Even if we don't have 'x'
-         * permission on any directory in the path on the NFS
-         * server (assuming it's NFS), we will be able to stat the
-         * mount point, and that will properly tell us if the
-         * fstype is NFS.
-         */
-
-        if ((p = strrchr(dirpath, '/')) == NULL) {
-            virReportSystemError(EINVAL,
-                         _("Invalid relative path '%s'"), path);
-            VIR_FREE(dirpath);
-            return -1;
-        }
-
-        if (p == dirpath)
-            *(p+1) = '\0';
-        else
-            *p = '\0';
-
-        statfs_ret = statfs(dirpath, &sb);
-
-    } while ((statfs_ret < 0) && (p != dirpath));
-
-    VIR_FREE(dirpath);
-
-    if (statfs_ret < 0) {
-        virReportSystemError(errno,
-                             _("cannot determine filesystem for '%s'"),
-                             path);
-        return -1;
-    }
-
-    VIR_DEBUG("Check if path %s with FS magic %lld is shared",
-              path, (long long int)sb.f_type);
-
-    if ((fstypes & VIR_STORAGE_FILE_SHFS_NFS) &&
-        (sb.f_type == NFS_SUPER_MAGIC))
-        return 1;
-
-    if ((fstypes & VIR_STORAGE_FILE_SHFS_GFS2) &&
-        (sb.f_type == GFS2_MAGIC))
-        return 1;
-    if ((fstypes & VIR_STORAGE_FILE_SHFS_OCFS) &&
-        (sb.f_type == OCFS2_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_STORAGE_FILE_SHFS_AFS) &&
-        (sb.f_type == AFS_FS_MAGIC))
-        return 1;
-    if ((fstypes & VIR_STORAGE_FILE_SHFS_SMB) &&
-        (sb.f_type == SMB_SUPER_MAGIC))
-        return 1;
-    if ((fstypes & VIR_STORAGE_FILE_SHFS_CIFS) &&
-        (sb.f_type == CIFS_SUPER_MAGIC))
-        return 1;
-
-    return 0;
-}
-#else
-int virStorageFileIsSharedFSType(const char *path ATTRIBUTE_UNUSED,
-                                 int fstypes ATTRIBUTE_UNUSED)
-{
-    /* XXX implement me :-) */
-    return 0;
-}
-#endif
-
-int virStorageFileIsSharedFS(const char *path)
-{
-    return virStorageFileIsSharedFSType(path,
-                                        VIR_STORAGE_FILE_SHFS_NFS |
-                                        VIR_STORAGE_FILE_SHFS_GFS2 |
-                                        VIR_STORAGE_FILE_SHFS_OCFS |
-                                        VIR_STORAGE_FILE_SHFS_AFS |
-                                        VIR_STORAGE_FILE_SHFS_SMB |
-                                        VIR_STORAGE_FILE_SHFS_CIFS);
-}
 
 int virStorageFileIsClusterFS(const char *path)
 {
     /* These are coherent cluster filesystems known to be safe for
      * migration with cache != none
      */
-    return virStorageFileIsSharedFSType(path,
-                                        VIR_STORAGE_FILE_SHFS_GFS2 |
-                                        VIR_STORAGE_FILE_SHFS_OCFS);
+    return virFileIsSharedFSType(path,
+                                 VIR_FILE_SHFS_GFS2 |
+                                 VIR_FILE_SHFS_OCFS);
 }
 
 #ifdef LVS
@@ -1421,7 +1339,7 @@ int virStorageFileGetLVMKey(const char *path,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     if (*key && STREQ(*key, ""))
         VIR_FREE(*key);
 
@@ -1471,7 +1389,7 @@ int virStorageFileGetSCSIKey(const char *path,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     if (*key && STREQ(*key, ""))
         VIR_FREE(*key);
 
@@ -1548,9 +1466,127 @@ virStorageFileChainLookup(virStorageFileMetadataPtr chain, const char *start,
         *meta = owner->backingMeta;
     return owner->backingStore;
 
-error:
+ error:
     *parent = NULL;
     if (meta)
         *meta = NULL;
     return NULL;
+}
+
+
+void
+virStorageNetHostDefClear(virStorageNetHostDefPtr def)
+{
+    if (!def)
+        return;
+
+    VIR_FREE(def->name);
+    VIR_FREE(def->port);
+    VIR_FREE(def->socket);
+}
+
+
+void
+virStorageNetHostDefFree(size_t nhosts,
+                         virStorageNetHostDefPtr hosts)
+{
+    size_t i;
+
+    if (!hosts)
+        return;
+
+    for (i = 0; i < nhosts; i++)
+        virStorageNetHostDefClear(&hosts[i]);
+
+    VIR_FREE(hosts);
+}
+
+
+virStorageNetHostDefPtr
+virStorageNetHostDefCopy(size_t nhosts,
+                         virStorageNetHostDefPtr hosts)
+{
+    virStorageNetHostDefPtr ret = NULL;
+    size_t i;
+
+    if (VIR_ALLOC_N(ret, nhosts) < 0)
+        goto error;
+
+    for (i = 0; i < nhosts; i++) {
+        virStorageNetHostDefPtr src = &hosts[i];
+        virStorageNetHostDefPtr dst = &ret[i];
+
+        dst->transport = src->transport;
+
+        if (VIR_STRDUP(dst->name, src->name) < 0)
+            goto error;
+
+        if (VIR_STRDUP(dst->port, src->port) < 0)
+            goto error;
+
+        if (VIR_STRDUP(dst->socket, src->socket) < 0)
+            goto error;
+    }
+
+    return ret;
+
+ error:
+    virStorageNetHostDefFree(nhosts, ret);
+    return NULL;
+}
+
+
+void
+virStorageSourcePoolDefFree(virStorageSourcePoolDefPtr def)
+{
+    if (!def)
+        return;
+
+    VIR_FREE(def->pool);
+    VIR_FREE(def->volume);
+
+    VIR_FREE(def);
+}
+
+
+void
+virStorageSourceAuthClear(virStorageSourcePtr def)
+{
+    VIR_FREE(def->auth.username);
+
+    if (def->auth.secretType == VIR_STORAGE_SECRET_TYPE_USAGE)
+        VIR_FREE(def->auth.secret.usage);
+
+    def->auth.secretType = VIR_STORAGE_SECRET_TYPE_NONE;
+}
+
+
+void
+virStorageSourceClear(virStorageSourcePtr def)
+{
+    size_t i;
+
+    if (!def)
+        return;
+
+    VIR_FREE(def->path);
+    virStorageSourcePoolDefFree(def->srcpool);
+    VIR_FREE(def->driverName);
+    virBitmapFree(def->features);
+    VIR_FREE(def->compat);
+    virStorageEncryptionFree(def->encryption);
+
+    if (def->seclabels) {
+        for (i = 0; i < def->nseclabels; i++)
+            virSecurityDeviceLabelDefFree(def->seclabels[i]);
+        VIR_FREE(def->seclabels);
+    }
+    if (def->perms) {
+        VIR_FREE(def->perms->label);
+        VIR_FREE(def->perms);
+    }
+    VIR_FREE(def->timestamps);
+
+    virStorageNetHostDefFree(def->nhosts, def->hosts);
+    virStorageSourceAuthClear(def);
 }

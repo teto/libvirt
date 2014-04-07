@@ -48,6 +48,8 @@
 /* For virReportOOMError()  and virReportSystemError() */
 #define VIR_FROM_THIS VIR_FROM_NONE
 
+VIR_LOG_INIT("util.usb");
+
 struct _virUSBDevice {
     unsigned int      bus;
     unsigned int      dev;
@@ -112,7 +114,7 @@ static int virUSBSysReadFile(const char *f_name, const char *d_name,
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     VIR_FREE(filename);
     VIR_FREE(buf);
     return ret;
@@ -197,7 +199,7 @@ virUSBDeviceSearch(unsigned int vendor,
     }
     ret = list;
 
-cleanup:
+ cleanup:
     if (dir) {
         int saved_errno = errno;
         closedir(dir);

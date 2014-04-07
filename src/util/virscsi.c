@@ -36,7 +36,6 @@
 #include <unistd.h>
 
 #include "virscsi.h"
-#include "virlog.h"
 #include "viralloc.h"
 #include "virfile.h"
 #include "virutil.h"
@@ -142,7 +141,7 @@ virSCSIDeviceGetSgName(const char *sysfs_prefix,
             goto cleanup;
     }
 
-cleanup:
+ cleanup:
     closedir(dir);
     VIR_FREE(path);
     return sg;
@@ -187,7 +186,7 @@ virSCSIDeviceGetDevName(const char *sysfs_prefix,
         break;
     }
 
-cleanup:
+ cleanup:
     closedir(dir);
     VIR_FREE(path);
     return name;
@@ -257,7 +256,7 @@ virSCSIDeviceNew(const char *sysfs_prefix,
         goto cleanup;
 
     ret = dev;
-cleanup:
+ cleanup:
     VIR_FREE(sg);
     VIR_FREE(vendor);
     VIR_FREE(model);
@@ -310,7 +309,7 @@ virSCSIDeviceSetUsedBy(virSCSIDevicePtr dev,
 
     return 0;
 
-cleanup:
+ cleanup:
     virSCSIDeviceUsedByInfoFree(copy);
     return -1;
 }

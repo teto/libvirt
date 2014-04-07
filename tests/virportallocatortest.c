@@ -118,6 +118,7 @@ int bind(int sockfd ATTRIBUTE_UNUSED,
 
 #  define VIR_FROM_THIS VIR_FROM_RPC
 
+VIR_LOG_INIT("tests.portallocatortest");
 
 static int testAllocAll(const void *args ATTRIBUTE_UNUSED)
 {
@@ -183,7 +184,7 @@ static int testAllocAll(const void *args ATTRIBUTE_UNUSED)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     virObjectUnref(alloc);
     return ret;
 }
@@ -236,7 +237,7 @@ static int testAllocReuse(const void *args ATTRIBUTE_UNUSED)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     virObjectUnref(alloc);
     return ret;
 }
@@ -261,7 +262,7 @@ mymain(void)
     if (virtTestRun("Test IPv4-only alloc reuse", testAllocReuse, NULL) < 0)
         ret = -1;
 
-    return ret==0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 VIRT_TEST_MAIN_PRELOAD(mymain, abs_builddir "/.libs/libvirportallocatormock.so")

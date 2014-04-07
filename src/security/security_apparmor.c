@@ -1,7 +1,7 @@
 /*
  * AppArmor security driver for libvirt
  *
- * Copyright (C) 2011-2013 Red Hat, Inc.
+ * Copyright (C) 2011-2014 Red Hat, Inc.
  * Copyright (C) 2009-2010 Canonical Ltd.
  *
  * This library is free software; you can redistribute it and/or
@@ -52,6 +52,9 @@
 #include "virscsi.h"
 
 #define VIR_FROM_THIS VIR_FROM_SECURITY
+
+VIR_LOG_INIT("security.security_apparmor");
+
 #define SECURITY_APPARMOR_VOID_DOI      "0"
 #define SECURITY_APPARMOR_NAME          "apparmor"
 #define VIRT_AA_HELPER LIBEXECDIR "/virt-aa-helper"
@@ -103,7 +106,7 @@ profile_status(const char *str, const int check_enforcing)
     }
 
     VIR_FREE(content);
-  cleanup:
+ cleanup:
     VIR_FREE(tmp);
     VIR_FREE(etmp);
 
@@ -150,7 +153,7 @@ profile_status_file(const char *str)
     else
         rc = 1;
 
-  failed:
+ failed:
     VIR_FREE(tmp);
     VIR_FREE(profile);
     VIR_FREE(content);
@@ -196,7 +199,7 @@ load_profile(virSecurityManagerPtr mgr,
     virCommandSetInputBuffer(cmd, xml);
     rc = virCommandRun(cmd, NULL);
 
-cleanup:
+ cleanup:
     VIR_FREE(xml);
     virCommandFree(cmd);
 
@@ -256,7 +259,7 @@ use_apparmor(void)
 
     rc = profile_status(libvirt_daemon, 1);
 
-cleanup:
+ cleanup:
     VIR_FREE(libvirt_daemon);
     return rc;
 }
@@ -296,7 +299,7 @@ reload_profile(virSecurityManagerPtr mgr,
     }
 
     rc = 0;
-  cleanup:
+ cleanup:
     VIR_FREE(profile_name);
 
     return rc;
@@ -366,7 +369,7 @@ AppArmorSecurityManagerProbe(const char *virtDriver ATTRIBUTE_UNUSED)
     }
     rc = SECURITY_DRIVER_ENABLE;
 
-  cleanup:
+ cleanup:
     VIR_FREE(template);
 
     return rc;
@@ -458,12 +461,12 @@ AppArmorGenSecurityLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     rc = 0;
     goto cleanup;
 
-  err:
+ err:
     VIR_FREE(secdef->label);
     VIR_FREE(secdef->imagelabel);
     VIR_FREE(secdef->model);
 
-  cleanup:
+ cleanup:
     VIR_FREE(profile_name);
 
     return rc;
@@ -518,7 +521,7 @@ AppArmorGetSecurityProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     }
     rc = 0;
 
-  cleanup:
+ cleanup:
     VIR_FREE(profile_name);
 
     return rc;
@@ -605,7 +608,7 @@ AppArmorSetSecurityProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     }
     rc = 0;
 
-  cleanup:
+ cleanup:
     VIR_FREE(profile_name);
 
     return rc;
@@ -651,7 +654,7 @@ AppArmorSetSecurityChildProcessLabel(virSecurityManagerPtr mgr ATTRIBUTE_UNUSED,
     virCommandSetAppArmorProfile(cmd, profile_name);
     rc = 0;
 
-  cleanup:
+ cleanup:
     VIR_FREE(profile_name);
     VIR_FREE(cmd_str);
     return rc;
@@ -685,7 +688,7 @@ AppArmorRestoreSecurityImageLabel(virSecurityManagerPtr mgr,
                                   virDomainDefPtr def,
                                   virDomainDiskDefPtr disk)
 {
-    if (disk->type == VIR_DOMAIN_DISK_TYPE_NETWORK)
+    if (virDomainDiskGetType(disk) == VIR_STORAGE_TYPE_NETWORK)
         return 0;
 
     return reload_profile(mgr, def, NULL, false);
@@ -707,14 +710,16 @@ AppArmorSetSecurityImageLabel(virSecurityManagerPtr mgr,
     if (secdef->norelabel)
         return 0;
 
-    if (!disk->src || disk->type == VIR_DOMAIN_DISK_TYPE_NETWORK)
+    if (!virDomainDiskGetSource(disk) ||
+        virDomainDiskGetType(disk) == VIR_STORAGE_TYPE_NETWORK)
         return 0;
 
     if (secdef->imagelabel) {
         /* if the device doesn't exist, error out */
-        if (!virFileExists(disk->src)) {
+        if (!virFileExists(virDomainDiskGetSource(disk))) {
             virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("\'%s\' does not exist"), disk->src);
+                           _("\'%s\' does not exist"),
+                           virDomainDiskGetSource(disk));
             return rc;
         }
 
@@ -723,7 +728,8 @@ AppArmorSetSecurityImageLabel(virSecurityManagerPtr mgr,
 
         /* update the profile only if it is loaded */
         if (profile_loaded(secdef->imagelabel) >= 0) {
-            if (load_profile(mgr, secdef->imagelabel, def, disk->src,
+            if (load_profile(mgr, secdef->imagelabel, def,
+                             virDomainDiskGetSource(disk),
                              false) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
                                _("cannot update AppArmor profile "
@@ -735,7 +741,7 @@ AppArmorSetSecurityImageLabel(virSecurityManagerPtr mgr,
     }
     rc = 0;
 
-  cleanup:
+ cleanup:
     VIR_FREE(profile_name);
 
     return rc;
@@ -865,7 +871,7 @@ AppArmorSetSecurityHostdevLabel(virSecurityManagerPtr mgr,
         break;
     }
 
-done:
+ done:
     VIR_FREE(ptr);
     return ret;
 }

@@ -21,7 +21,8 @@
 #include <config.h>
 
 #include "testutils.h"
-#include "vircommand.h"
+#define __VIR_COMMAND_PRIV_H_ALLOW__
+#include "vircommandpriv.h"
 #include "virnetdevbandwidth.h"
 #include "netdev_bandwidth_conf.c"
 
@@ -76,7 +77,7 @@ testVirNetDevBandwidthSet(const void *data)
     if (!iface)
         iface = "eth0";
 
-    virCommandSetDryRun(&buf);
+    virCommandSetDryRun(&buf, NULL, NULL);
 
     if (virNetDevBandwidthSet(iface, band, info->hierarchical_class) < 0)
         goto cleanup;
@@ -99,7 +100,8 @@ testVirNetDevBandwidthSet(const void *data)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
+    virCommandSetDryRun(NULL, NULL, NULL);
     virNetDevBandwidthFree(band);
     virBufferFreeAndReset(&buf);
     VIR_FREE(actual_cmd);
@@ -137,7 +139,7 @@ mymain(void)
                  TC " qdisc add dev eth0 root handle 1: htb default 1\n"
                  TC " class add dev eth0 parent 1: classid 1:1 htb rate 1024kbps\n"
                  TC " qdisc add dev eth0 parent 1:1 handle 2: sfq perturb 10\n"
-                 TC " filter add dev eth0 parent 1:0 protocol ip handle 1 fw flowid 1\n"));
+                 TC " filter add dev eth0 parent 1:0 protocol all handle 1 fw flowid 1\n"));
 
     DO_TEST_SET(("<bandwidth>"
                  "  <outbound average='1024'/>"
@@ -145,7 +147,7 @@ mymain(void)
                 (TC " qdisc del dev eth0 root\n"
                  TC " qdisc del dev eth0 ingress\n"
                  TC " qdisc add dev eth0 ingress\n"
-                 TC " filter add dev eth0 parent ffff: protocol ip u32 match ip src 0.0.0.0/0 "
+                 TC " filter add dev eth0 parent ffff: protocol all u32 match u32 0 0 "
                  "police rate 1024kbps burst 1024kb mtu 64kb drop flowid :1\n"));
 
     DO_TEST_SET(("<bandwidth>"
@@ -157,9 +159,9 @@ mymain(void)
                  TC " qdisc add dev eth0 root handle 1: htb default 1\n"
                  TC " class add dev eth0 parent 1: classid 1:1 htb rate 1kbps ceil 2kbps burst 4kb\n"
                  TC " qdisc add dev eth0 parent 1:1 handle 2: sfq perturb 10\n"
-                 TC " filter add dev eth0 parent 1:0 protocol ip handle 1 fw flowid 1\n"
+                 TC " filter add dev eth0 parent 1:0 protocol all handle 1 fw flowid 1\n"
                  TC " qdisc add dev eth0 ingress\n"
-                 TC " filter add dev eth0 parent ffff: protocol ip u32 match ip src 0.0.0.0/0 "
+                 TC " filter add dev eth0 parent ffff: protocol all u32 match u32 0 0 "
                  "police rate 5kbps burst 7kb mtu 64kb drop flowid :1\n"));
 
     return ret;

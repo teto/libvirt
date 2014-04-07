@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Red Hat, Inc.
+ * Copyright (C) 2013, 2014 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -37,6 +37,7 @@
 
 #define VIR_FROM_THIS VIR_FROM_NONE
 
+VIR_LOG_INIT("tests.identitytest");
 
 static int testIdentityAttrs(const void *data ATTRIBUTE_UNUSED)
 {
@@ -90,7 +91,7 @@ static int testIdentityAttrs(const void *data ATTRIBUTE_UNUSED)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     virObjectUnref(ident);
     return ret;
 }
@@ -157,7 +158,7 @@ static int testIdentityEqual(const void *data ATTRIBUTE_UNUSED)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     virObjectUnref(identa);
     virObjectUnref(identb);
     return ret;
@@ -194,7 +195,7 @@ static int testIdentityGetSystem(const void *data)
     }
 
     ret = 0;
-cleanup:
+ cleanup:
     virObjectUnref(ident);
     return ret;
 }
@@ -238,7 +239,7 @@ mymain(void)
     if (virtTestRun("System identity (fake SELinux disabled) ", testIdentityGetSystem, NULL) < 0)
         ret = -1;
 
-    return ret==0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 #if WITH_SELINUX

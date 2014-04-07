@@ -43,6 +43,13 @@
 # include <sys/mman.h>
 #endif
 
+#ifdef __linux__
+# if HAVE_LINUX_MAGIC_H
+#  include <linux/magic.h>
+# endif
+# include <sys/statfs.h>
+#endif
+
 #if defined(__linux__) && HAVE_DECL_LO_FLAGS_AUTOCLEAR
 # include <linux/loop.h>
 # include <sys/ioctl.h>
@@ -62,6 +69,8 @@
 #include "c-ctype.h"
 
 #define VIR_FROM_THIS VIR_FROM_NONE
+
+VIR_LOG_INIT("util.file");
 
 int virFileClose(int *fdptr, virFileCloseFlags flags)
 {
@@ -265,7 +274,7 @@ virFileWrapperFdNew(int *fd, const char *name, unsigned int flags)
     *fd = pipefd[output];
     return ret;
 
-error:
+ error:
     VIR_FORCE_CLOSE(pipefd[0]);
     VIR_FORCE_CLOSE(pipefd[1]);
     virFileWrapperFdFree(ret);
@@ -339,13 +348,14 @@ virFileWrapperFdFree(virFileWrapperFdPtr wfd)
  * @shared: type of lock to acquire
  * @start: byte offset to start lock
  * @len: length of lock (0 to acquire entire remaining file from @start)
+ * @waitForLock: wait for previously held lock or not
  *
  * Attempt to acquire a lock on the file @fd. If @shared
  * is true, then a shared lock will be acquired,
  * otherwise an exclusive lock will be acquired. If
  * the lock cannot be acquired, an error will be
- * returned. This will not wait to acquire the lock if
- * another process already holds it.
+ * returned. If @waitForLock is true, this will wait
+ * for the lock if another process has already acquired it.
  *
  * The lock will be released when @fd is closed. The lock
  * will also be released if *any* other open file descriptor
@@ -356,7 +366,7 @@ virFileWrapperFdFree(virFileWrapperFdPtr wfd)
  *
  * Returns 0 on success, or -errno otherwise
  */
-int virFileLock(int fd, bool shared, off_t start, off_t len)
+int virFileLock(int fd, bool shared, off_t start, off_t len, bool waitForLock)
 {
     struct flock fl = {
         .l_type = shared ? F_RDLCK : F_WRLCK,
@@ -365,7 +375,9 @@ int virFileLock(int fd, bool shared, off_t start, off_t len)
         .l_len = len,
     };
 
-    if (fcntl(fd, F_SETLK, &fl) < 0)
+    int cmd = waitForLock ? F_SETLKW : F_SETLK;
+
+    if (fcntl(fd, cmd, &fl) < 0)
         return -errno;
 
     return 0;
@@ -402,7 +414,8 @@ int virFileUnlock(int fd, off_t start, off_t len)
 int virFileLock(int fd ATTRIBUTE_UNUSED,
                 bool shared ATTRIBUTE_UNUSED,
                 off_t start ATTRIBUTE_UNUSED,
-                off_t len ATTRIBUTE_UNUSED)
+                off_t len ATTRIBUTE_UNUSED,
+                bool waitForLock ATTRIBUTE_UNUSED)
 {
     return -ENOSYS;
 }
@@ -459,7 +472,7 @@ virFileRewrite(const char *path,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FORCE_CLOSE(fd);
     if (newfile) {
         unlink(newfile);
@@ -527,7 +540,8 @@ int virFileUpdatePerm(const char *path,
 }
 
 
-#if defined(__linux__) && HAVE_DECL_LO_FLAGS_AUTOCLEAR
+#if defined(__linux__) && HAVE_DECL_LO_FLAGS_AUTOCLEAR && \
+    !defined(LIBVIRT_SETUID_RPC_CLIENT)
 
 # if HAVE_DECL_LOOP_CTL_GET_FREE
 
@@ -637,7 +651,7 @@ static int virFileLoopDeviceOpenSearch(char **dev_name)
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Unable to find a free loop device in /dev"));
 
-cleanup:
+ cleanup:
     if (fd != -1) {
         VIR_DEBUG("Got free loop device %s %d", looppath, fd);
         *dev_name = looppath;
@@ -713,7 +727,7 @@ int virFileLoopDeviceAssociate(const char *file,
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(loname);
     VIR_FORCE_CLOSE(fsfd);
     if (ret == -1)
@@ -746,7 +760,7 @@ virFileNBDDeviceIsBusy(const char *devname)
     }
     ret = 1;
 
-cleanup:
+ cleanup:
     VIR_FREE(path);
     return ret;
 }
@@ -788,7 +802,7 @@ virFileNBDDeviceFindUnused(void)
         virReportSystemError(EBUSY, "%s",
                              _("No free NBD devices"));
 
-cleanup:
+ cleanup:
     closedir(dh);
     return ret;
 }
@@ -844,7 +858,7 @@ int virFileNBDDeviceAssociate(const char *file,
     nbddev = NULL;
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(nbddev);
     VIR_FREE(qemunbd);
     virCommandFree(cmd);
@@ -951,7 +965,7 @@ int virFileDeleteTree(const char *dir)
 
     ret = 0;
 
-cleanup:
+ cleanup:
     VIR_FREE(filepath);
     closedir(dh);
     return ret;
@@ -1131,7 +1145,7 @@ virFileFindMountPoint(const char *type)
     if (!ret)
         errno = ENOENT;
 
-cleanup:
+ cleanup:
     endmntent(f);
 
     return ret;
@@ -1638,7 +1652,7 @@ virFileGetMountSubtreeImpl(const char *mtabpath,
     *nmountsret = nmounts ? nmounts - 1 : 0;
     ret = 0;
 
-cleanup:
+ cleanup:
     if (ret < 0)
         virStringFreeList(mounts);
     endmntent(procmnt);
@@ -1770,7 +1784,7 @@ virFileAccessibleAs(const char *path, int mode,
     if (access(path, mode) < 0)
         ret = errno;
 
-childerror:
+ childerror:
     if ((ret & 0xFF) != ret) {
         VIR_WARN("unable to pass desired return value %d", ret);
         ret = 0xFF;
@@ -2044,7 +2058,7 @@ virFileOpenAs(const char *path, int openflags, mode_t mode,
 
             /* On Linux we can also verify the FS-type of the
              * directory.  (this is a NOP on other platforms). */
-            if (virStorageFileIsSharedFS(path) <= 0)
+            if (virFileIsSharedFS(path) <= 0)
                 goto error;
         }
 
@@ -2058,7 +2072,7 @@ virFileOpenAs(const char *path, int openflags, mode_t mode,
     /* File is successfully opened */
     return fd;
 
-error:
+ error:
     if (fd >= 0) {
         /* some other failure after the open succeeded */
         VIR_FORCE_CLOSE(fd);
@@ -2104,7 +2118,7 @@ virDirCreateNoFork(const char *path,
                              path, mode);
         goto error;
     }
-error:
+ error:
     return ret;
 }
 
@@ -2162,7 +2176,7 @@ virDirCreate(const char *path,
              * some cases */
             return virDirCreateNoFork(path, mode, uid, gid, flags);
         }
-parenterror:
+ parenterror:
         return ret;
     }
 
@@ -2204,7 +2218,7 @@ parenterror:
                              path, mode);
         goto childerror;
     }
-childerror:
+ childerror:
     _exit(ret);
 }
 
@@ -2316,7 +2330,7 @@ virFileMakePathWithMode(const char *path,
 
     ret = virFileMakePathHelper(tmp, mode);
 
-cleanup:
+ cleanup:
     VIR_FREE(tmp);
     return ret;
 }
@@ -2437,7 +2451,7 @@ virFileOpenTty(int *ttymaster, char **ttyName, int rawmode)
 
     ret = 0;
 
-cleanup:
+ cleanup:
     if (ret != 0)
         VIR_FORCE_CLOSE(*ttymaster);
     VIR_FORCE_CLOSE(slave);
@@ -2635,8 +2649,121 @@ int virFilePrintf(FILE *fp, const char *msg, ...)
 
     VIR_FREE(str);
 
-cleanup:
+ cleanup:
     va_end(vargs);
 
     return ret;
+}
+
+
+#ifdef __linux__
+
+# ifndef NFS_SUPER_MAGIC
+#  define NFS_SUPER_MAGIC 0x6969
+# endif
+# ifndef OCFS2_SUPER_MAGIC
+#  define OCFS2_SUPER_MAGIC 0x7461636f
+# endif
+# ifndef GFS2_MAGIC
+#  define GFS2_MAGIC 0x01161970
+# endif
+# ifndef AFS_FS_MAGIC
+#  define AFS_FS_MAGIC 0x6B414653
+# endif
+# ifndef SMB_SUPER_MAGIC
+#  define SMB_SUPER_MAGIC 0x517B
+# endif
+# ifndef CIFS_SUPER_MAGIC
+#  define CIFS_SUPER_MAGIC 0xFF534D42
+# endif
+
+int
+virFileIsSharedFSType(const char *path,
+                      int fstypes)
+{
+    char *dirpath, *p;
+    struct statfs sb;
+    int statfs_ret;
+
+    if (VIR_STRDUP(dirpath, path) < 0)
+        return -1;
+
+    do {
+
+        /* Try less and less of the path until we get to a
+         * directory we can stat. Even if we don't have 'x'
+         * permission on any directory in the path on the NFS
+         * server (assuming it's NFS), we will be able to stat the
+         * mount point, and that will properly tell us if the
+         * fstype is NFS.
+         */
+
+        if ((p = strrchr(dirpath, '/')) == NULL) {
+            virReportSystemError(EINVAL,
+                         _("Invalid relative path '%s'"), path);
+            VIR_FREE(dirpath);
+            return -1;
+        }
+
+        if (p == dirpath)
+            *(p+1) = '\0';
+        else
+            *p = '\0';
+
+        statfs_ret = statfs(dirpath, &sb);
+
+    } while ((statfs_ret < 0) && (p != dirpath));
+
+    VIR_FREE(dirpath);
+
+    if (statfs_ret < 0) {
+        virReportSystemError(errno,
+                             _("cannot determine filesystem for '%s'"),
+                             path);
+        return -1;
+    }
+
+    VIR_DEBUG("Check if path %s with FS magic %lld is shared",
+              path, (long long int)sb.f_type);
+
+    if ((fstypes & VIR_FILE_SHFS_NFS) &&
+        (sb.f_type == NFS_SUPER_MAGIC))
+        return 1;
+
+    if ((fstypes & VIR_FILE_SHFS_GFS2) &&
+        (sb.f_type == GFS2_MAGIC))
+        return 1;
+    if ((fstypes & VIR_FILE_SHFS_OCFS) &&
+        (sb.f_type == OCFS2_SUPER_MAGIC))
+        return 1;
+    if ((fstypes & VIR_FILE_SHFS_AFS) &&
+        (sb.f_type == AFS_FS_MAGIC))
+        return 1;
+    if ((fstypes & VIR_FILE_SHFS_SMB) &&
+        (sb.f_type == SMB_SUPER_MAGIC))
+        return 1;
+    if ((fstypes & VIR_FILE_SHFS_CIFS) &&
+        (sb.f_type == CIFS_SUPER_MAGIC))
+        return 1;
+
+    return 0;
+}
+#else
+int virFileIsSharedFSType(const char *path ATTRIBUTE_UNUSED,
+                          int fstypes ATTRIBUTE_UNUSED)
+{
+    /* XXX implement me :-) */
+    return 0;
+}
+#endif
+
+int virFileIsSharedFS(const char *path)
+{
+    return virFileIsSharedFSType(path,
+                                 VIR_FILE_SHFS_NFS |
+                                 VIR_FILE_SHFS_GFS2 |
+                                 VIR_FILE_SHFS_OCFS |
+                                 VIR_FILE_SHFS_AFS |
+                                 VIR_FILE_SHFS_SMB |
+                                 VIR_FILE_SHFS_CIFS);
 }
